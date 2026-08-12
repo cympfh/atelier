@@ -1,27 +1,80 @@
 <!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>atelier</title>
-    <style>
-      :root {
-        color-scheme: dark light;
-        font-family: system-ui, sans-serif;
-      }
-      body {
-        margin: 2rem;
-        line-height: 1.5;
-      }
-      code {
-        font-family: ui-monospace, monospace;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>atelier</h1>
-    <p>Image / video editing webapp (Grok + SD WebUI).</p>
-    <p>Server is up. UI will grow in later phases.</p>
-    <p><a href="/health"><code>/health</code></a></p>
-  </body>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>atelier</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="top">
+      <div class="brand">
+        <span class="logo">atelier</span>
+        <span class="tag">image · video · lineage</span>
+      </div>
+      <div id="status" class="status">ready</div>
+    </header>
+
+    <main class="layout">
+      <section class="panel compose">
+        <h2>Compose</h2>
+        <label class="field">
+          <span>Backend</span>
+          <select id="backend"></select>
+        </label>
+        <label class="field">
+          <span>Mode</span>
+          <select id="mode">
+            <option value="t2i">Text → Image</option>
+            <option value="i2i">Image → Image</option>
+            <option value="t2v">Text → Video</option>
+            <option value="i2v">Image → Video</option>
+          </select>
+        </label>
+        <label class="field grow">
+          <span>Prompt <em>@Image1 @Video1</em></span>
+          <textarea id="prompt" rows="5" placeholder="Describe the result… use @Image1 to reference inputs"></textarea>
+        </label>
+        <div id="params" class="params"></div>
+        <div class="slots">
+          <div class="slots-head">
+            <span>Input slots</span>
+            <button type="button" id="clearSlots" class="ghost">Clear</button>
+          </div>
+          <div id="slotList" class="slot-list"></div>
+        </div>
+        <div class="actions">
+          <button type="button" id="generate" class="primary">Generate</button>
+          <label class="upload btn">
+            Upload
+            <input type="file" id="file" accept="image/*,video/*" hidden />
+          </label>
+        </div>
+        <pre id="error" class="error hidden"></pre>
+      </section>
+
+      <section class="panel preview">
+        <h2>Preview</h2>
+        <div id="preview" class="preview-stage empty">Select or generate media</div>
+        <div class="preview-meta" id="previewMeta"></div>
+        <div class="preview-actions">
+          <a id="download" class="btn hidden" href="#" download>Download</a>
+          <button type="button" id="useAsInput" class="ghost hidden">Use as input</button>
+        </div>
+      </section>
+
+      <section class="panel gallery">
+        <h2>Gallery</h2>
+        <div id="gallery" class="gallery-grid"></div>
+      </section>
+
+      <section class="panel lineage">
+        <h2>Lineage</h2>
+        <div id="tree" class="tree"></div>
+      </section>
+    </main>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
 </html>
