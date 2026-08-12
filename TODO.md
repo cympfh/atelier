@@ -28,23 +28,23 @@ black (line-length 120)、ty、pytest を uv dev 依存に追加。README に実
 
 # フェーズ 1: ドメインモデルと永続化
 
-## [ ] メディアノード型定義
-生成物/アップロードを表す `MediaNode`（id, kind=image|video, path/url, mime, created_at, backend, params, parent_ids 等）。Pydantic モデル推奨。
+## [x] メディアノード型定義 [2026-08-12 18:29 完了]
+`graph/models.py`: `MediaNode`（id, kind, filename, mime, created_at, backend, prompt, params, parent_ids, original_name）。
 
-## [ ] 生成エッジ / グラフ型定義
-入力→出力の依存関係。`Graph`（nodes, edges）。JSON シリアライズ可能に。
+## [x] 生成エッジ / グラフ型定義 [2026-08-12 18:29 完了]
+`Edge`（source→target, role）、`Graph`（nodes dict + edges list）。JSON シリアライズ可。
 
-## [ ] ローカルメディア保存
-アップロード/生成結果をデータディレクトリに保存。一意 ID + 拡張子。画像/動画の読み書きヘルパ。
+## [x] ローカルメディア保存 [2026-08-12 18:29 完了]
+`media/store.py`: `MediaStore` — `data/files/{id}.{ext}` に保存。mime から kind/ext 決定。
 
-## [ ] グラフ永続化
-セッションまたはプロジェクト単位でグラフを JSON（等）で保存・読込。再起動後も再利用可能に。
+## [x] グラフ永続化 [2026-08-12 18:29 完了]
+`graph/store.py`: `GraphStore` — `data/graph.json` に atomic write。再起動後も読込。
 
-## [ ] メディア一覧・取得 API
-`GET /api/media`、`GET /api/media/{id}`（メタデータ）、`GET /api/media/{id}/file`（本体配信）。
+## [x] メディア一覧・取得 API [2026-08-12 18:29 完了]
+`GET /api/media`、`GET /api/media/{id}`、`GET /api/media/{id}/file`。
 
-## [ ] アップロード API
-`POST /api/media/upload`：ユーザー入力画像/動画を取り込み、ノード化してグラフに追加。
+## [x] アップロード API [2026-08-12 18:29 完了]
+`POST /api/media/upload`（multipart）。backend=`upload` でグラフに追加。テスト 5 件通過。
 
 ---
 

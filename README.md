@@ -48,6 +48,17 @@ uv run atelier start --reload
 
 ブラウザで `http://127.0.0.1:8000/` 、ヘルスチェックは `http://127.0.0.1:8000/health`。
 
+### Media API
+
+| Method | Path | 説明 |
+|--------|------|------|
+| GET | `/api/media` | メディア一覧（新しい順） |
+| GET | `/api/media/{id}` | メタデータ |
+| GET | `/api/media/{id}/file` | 本体ファイル |
+| POST | `/api/media/upload` | multipart アップロード（`file` フィールド） |
+
+保存先: `{ATELIER_DATA_DIR}/files/` 、グラフ: `{ATELIER_DATA_DIR}/graph.json`。
+
 ## 開発
 
 ```bash

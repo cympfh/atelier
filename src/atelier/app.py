@@ -7,17 +7,24 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from atelier import __version__
+from atelier.api import build_api_router
 from atelier.config import Settings, get_settings
+from atelier.graph.store import GraphStore
+from atelier.media.store import MediaStore
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
-    settings.ensure_data_dir()
+    data_dir = settings.ensure_data_dir()
 
     app = FastAPI(title="atelier", version=__version__)
     app.state.settings = settings
+    app.state.media_store = MediaStore(data_dir)
+    app.state.graph_store = GraphStore(data_dir)
+
+    app.include_router(build_api_router())
 
     @app.get("/health")
     def health() -> dict[str, str]:
