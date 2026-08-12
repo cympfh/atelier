@@ -139,14 +139,16 @@ class GrokClient:
             "n": n,
             "response_format": response_format,
         }
-        # xAI image field schema differs by cardinality:
-        # - single: object {url, type} (string alone → 422 "expected map")
-        # - multi:  array of URL/data-URI strings (map elements → 422 "expected string")
+        # Official /v1/images/edits schema (docs.x.ai REST reference):
+        # - single:  "image":  { "url": "...", "type": "image_url" }
+        # - multi:   "images": [ { "url": "...", "type": "image_url" }, ... ]
+        #   mutually exclusive with "image"; up to 3; order = <IMAGE_0>, <IMAGE_1>, ...
+        #   (do NOT put multi under "image" as a string list — only first is used / invalid)
         uris = list(image_uris[:3])
         if len(uris) == 1:
             body["image"] = {"url": uris[0], "type": "image_url"}
         else:
-            body["image"] = uris
+            body["images"] = [{"url": u, "type": "image_url"} for u in uris]
 
         data = await self._request("POST", "/images/edits", json=body)
         return await self._collect_image_payloads(data)

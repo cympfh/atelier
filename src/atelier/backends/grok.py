@@ -20,6 +20,35 @@ from atelier.backends.types import (
 )
 from atelier.config import Settings
 
+
+def _prompt_with_image_tags(prompt: str, count: int) -> str:
+    """Ensure multi-image edits name sources as <IMAGE_0> … (official xAI convention).
+
+    Also maps @ImageN / @imageN (1-based) → <IMAGE_{N-1}>.
+    """
+    import re
+
+    text = prompt or ""
+
+    # @Image1 → <IMAGE_0>
+    def _at_repl(m: re.Match[str]) -> str:
+        idx = int(m.group(1)) - 1
+        if 0 <= idx < count:
+            return f"<IMAGE_{idx}>"
+        return m.group(0)
+
+    text = re.sub(r"@Image(\d+)", _at_repl, text, flags=re.IGNORECASE)
+    if count <= 1:
+        return text
+    if re.search(r"<IMAGE_\d+>", text):
+        return text
+    tags = ", ".join(f"<IMAGE_{i}>" for i in range(count))
+    base = text.strip()
+    if base:
+        return f"{base}\n\n(Use all of: {tags})"
+    return f"Combine or edit using {tags}."
+
+
 # Params exposed to UI / API
 GROK_PARAM_SCHEMA: dict[str, Any] = {
     "aspect_ratio": {
@@ -145,15 +174,23 @@ class GrokBackend(Backend):
             raise GenerationError("i2i requires image inputs")
         model = str(params.get("image_model") or params.get("model") or DEFAULT_IMAGE_MODEL)
         n = int(params.get("n") or 1)
-        uris = [to_data_uri(i.data, i.mime) for i in inputs if i.mime.startswith("image/")]
+        image_inputs = [i for i in inputs if i.mime.startswith("image/")]
+        uris = [to_data_uri(i.data, i.mime) for i in image_inputs]
         if not uris:
             raise GenerationError("i2i requires image/* inputs")
-        pairs = await client.edit_images(prompt, uris, model=model, n=n)
+        # Multi-image docs: refer to sources as <IMAGE_0>, <IMAGE_1>, ... in the prompt
+        edit_prompt = _prompt_with_image_tags(prompt, len(uris))
+        pairs = await client.edit_images(edit_prompt, uris, model=model, n=n)
         return [
             GeneratedAsset(
                 data=data,
                 mime=mime,
-                params={"model": model, "n": n, "input_count": len(uris)},
+                params={
+                    "model": model,
+                    "n": n,
+                    "input_count": len(uris),
+                    "edit_prompt": edit_prompt,
+                },
             )
             for data, mime in pairs
         ]

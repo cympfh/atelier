@@ -100,10 +100,15 @@ def test_grok_i2i_multi_image_payload() -> None:
     assets = asyncio.run(backend.generate(GenerateMode.i2i, "combine", inputs, {}))
     assert len(assets) == 1
     body = next(c[2] for c in transport.calls if c[0] == "POST" and "/images/edits" in c[1])
-    # multi: array of strings (map elements → 422)
-    assert isinstance(body["image"], list)
-    assert len(body["image"]) == 2
-    assert all(isinstance(u, str) and u.startswith("data:") for u in body["image"])
+    # multi: "images" array of {url, type} objects (mutually exclusive with "image")
+    assert "image" not in body or body.get("image") is None
+    assert isinstance(body["images"], list)
+    assert len(body["images"]) == 2
+    assert all(isinstance(o, dict) and o.get("type") == "image_url" for o in body["images"])
+    assert all(o["url"].startswith("data:") for o in body["images"])
+    # prompt should reference <IMAGE_0>, <IMAGE_1>
+    assert "<IMAGE_0>" in body["prompt"]
+    assert "<IMAGE_1>" in body["prompt"]
 
 
 def test_grok_i2v_poll_mock() -> None:
