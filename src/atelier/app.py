@@ -70,8 +70,7 @@ def create_app(settings: Settings | None = None, *, include_echo: bool = False) 
         if index_path.is_file():
             return index_path.read_text(encoding="utf-8")
         return (
-            "<!DOCTYPE html><html><head><title>atelier</title></head>"
-            "<body><h1>atelier</h1><p>ok</p></body></html>"
+            "<!DOCTYPE html><html><head><title>atelier</title></head>" "<body><h1>atelier</h1><p>ok</p></body></html>"
         )
 
     if STATIC_DIR.is_dir():

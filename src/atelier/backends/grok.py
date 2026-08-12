@@ -33,7 +33,8 @@ GROK_PARAM_SCHEMA: dict[str, Any] = {
         "minimum": 1,
         "maximum": 10,
         "default": 1,
-        "modes": ["t2i", "i2i"],
+        "description": "Number of outputs (video: sequential requests)",
+        "modes": ["t2i", "i2i", "t2v", "i2v"],
     },
     "image_model": {
         "type": "string",
@@ -159,28 +160,34 @@ class GrokBackend(Backend):
 
     async def _t2v(self, client: GrokClient, prompt: str, params: dict[str, Any]) -> list[GeneratedAsset]:
         model = str(params.get("video_model") or params.get("model") or DEFAULT_VIDEO_MODEL)
+        n = max(1, min(10, int(params.get("n") or 1)))
         duration = params.get("duration")
         aspect = params.get("aspect_ratio")
         resolution = params.get("resolution")
-        data, mime = await client.generate_video(
-            prompt,
-            model=model,
-            duration=int(duration) if duration is not None else None,
-            aspect_ratio=str(aspect) if aspect else None,
-            resolution=str(resolution) if resolution else None,
-        )
-        return [
-            GeneratedAsset(
-                data=data,
-                mime=mime,
-                params={
-                    "model": model,
-                    "duration": duration,
-                    "aspect_ratio": aspect,
-                    "resolution": resolution,
-                },
+        out: list[GeneratedAsset] = []
+        for i in range(n):
+            data, mime = await client.generate_video(
+                prompt,
+                model=model,
+                duration=int(duration) if duration is not None else None,
+                aspect_ratio=str(aspect) if aspect else None,
+                resolution=str(resolution) if resolution else None,
             )
-        ]
+            out.append(
+                GeneratedAsset(
+                    data=data,
+                    mime=mime,
+                    params={
+                        "model": model,
+                        "n": n,
+                        "index": i,
+                        "duration": duration,
+                        "aspect_ratio": aspect,
+                        "resolution": resolution,
+                    },
+                )
+            )
+        return out
 
     async def _i2v(
         self,
@@ -195,28 +202,34 @@ class GrokBackend(Backend):
         if img is None:
             raise GenerationError("i2v requires an image/* input")
         model = str(params.get("video_model") or params.get("model") or DEFAULT_VIDEO_MODEL)
+        n = max(1, min(10, int(params.get("n") or 1)))
         duration = params.get("duration")
         aspect = params.get("aspect_ratio")
         resolution = params.get("resolution")
         uri = to_data_uri(img.data, img.mime)
-        data, mime = await client.generate_video(
-            prompt,
-            model=model,
-            image_uri=uri,
-            duration=int(duration) if duration is not None else None,
-            aspect_ratio=str(aspect) if aspect else None,
-            resolution=str(resolution) if resolution else None,
-        )
-        return [
-            GeneratedAsset(
-                data=data,
-                mime=mime,
-                params={
-                    "model": model,
-                    "duration": duration,
-                    "aspect_ratio": aspect,
-                    "resolution": resolution,
-                    "source_id": img.id,
-                },
+        out: list[GeneratedAsset] = []
+        for i in range(n):
+            data, mime = await client.generate_video(
+                prompt,
+                model=model,
+                image_uri=uri,
+                duration=int(duration) if duration is not None else None,
+                aspect_ratio=str(aspect) if aspect else None,
+                resolution=str(resolution) if resolution else None,
             )
-        ]
+            out.append(
+                GeneratedAsset(
+                    data=data,
+                    mime=mime,
+                    params={
+                        "model": model,
+                        "n": n,
+                        "index": i,
+                        "duration": duration,
+                        "aspect_ratio": aspect,
+                        "resolution": resolution,
+                        "source_id": img.id,
+                    },
+                )
+            )
+        return out

@@ -106,6 +106,36 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.45; }
   margin-top: 0.25rem;
 }
 
+.radio-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+.radio:has(input:checked) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel-2));
+}
+.radio:has(input:disabled) {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.radio input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
 .dropzone {
   margin: 0.25rem 0 1rem;
   border: 1.5px dashed var(--border);

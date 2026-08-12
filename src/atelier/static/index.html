@@ -8,7 +8,7 @@
   <link rel="icon" href="/static/icons/atelier.svg" type="image/svg+xml" />
   <link rel="icon" href="/static/icons/favicon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="/static/app.css" />
+  <link rel="stylesheet" href="/static/app.css?v=5" />
 </head>
 <body>
   <div id="app">
@@ -37,14 +37,20 @@
           <span>Backend</span>
           <select id="backend"></select>
         </label>
-        <label class="field">
+        <div class="field">
           <span>Output</span>
-          <select id="outputKind">
-            <option value="image">→ Image</option>
-            <option value="video">→ Video</option>
-          </select>
+          <div id="outputKind" class="radio-row" role="radiogroup" aria-label="Output">
+            <label class="radio">
+              <input type="radio" name="outputKind" value="image" checked />
+              <span>→ Image</span>
+            </label>
+            <label class="radio">
+              <input type="radio" name="outputKind" value="video" />
+              <span>→ Video</span>
+            </label>
+          </div>
           <span id="modeHint" class="mode-hint">mode: t2i (auto)</span>
-        </label>
+        </div>
         <label class="field grow">
           <span>Prompt <em>@Image1 @Video1 · Ctrl+Enter</em></span>
           <textarea id="prompt" rows="5" placeholder="Describe the result… use @Image1 to reference inputs"></textarea>
@@ -83,6 +89,9 @@
         <div class="preview-actions">
           <a id="download" class="btn hidden" href="#" download>Download</a>
           <button type="button" id="useAsInput" class="ghost hidden">Use as input</button>
+          <button type="button" id="restoreSetup" class="ghost hidden" title="Restore prompt and inputs used to generate this">
+            Restore setup
+          </button>
         </div>
       </section>
 
@@ -97,6 +106,6 @@
       </section>
     </main>
   </div>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=5"></script>
 </body>
 </html>

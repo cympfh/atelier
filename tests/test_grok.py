@@ -93,3 +93,14 @@ def test_grok_i2v_poll_mock() -> None:
     assert len(assets) == 1
     assert assets[0].mime == "video/mp4"
     assert assets[0].data == b"fake-mp4"
+
+
+def test_grok_video_n_serial() -> None:
+    transport = MockTransport()
+    client = GrokClient("key", client=httpx.AsyncClient(transport=transport), video_timeout=30)
+    backend = GrokBackend(Settings(XAI_API_KEY="key"), client=client)
+    assets = asyncio.run(backend.generate(GenerateMode.t2v, "clip", [], {"n": 3, "duration": 5}))
+    assert len(assets) == 3
+    gens = [c for c in transport.calls if c[0] == "POST" and "/videos/generations" in c[1]]
+    assert len(gens) == 3
+    assert [a.params.get("index") for a in assets] == [0, 1, 2]

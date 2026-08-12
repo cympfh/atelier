@@ -60,9 +60,14 @@
     return !!c[`supports_${mode}`];
   }
 
+  function outputKind() {
+    const el = document.querySelector('input[name="outputKind"]:checked');
+    return el ? el.value : "image";
+  }
+
   /** Resolve t2i/i2i/t2v/i2v from output kind + input slots. */
   function resolvedMode() {
-    const out = $("outputKind").value; // image | video
+    const out = outputKind(); // image | video
     const hasInput = state.slots.length > 0;
     if (out === "video") return hasInput ? "i2v" : "t2v";
     return hasInput ? "i2i" : "t2i";
@@ -70,9 +75,9 @@
 
   function refreshModeOptions() {
     const b = currentBackend();
-    const outSel = $("outputKind");
-    for (const opt of outSel.options) {
-      const kind = opt.value;
+    const radios = [...document.querySelectorAll('input[name="outputKind"]')];
+    for (const radio of radios) {
+      const kind = radio.value;
       let ok = true;
       if (b) {
         if (kind === "image") {
@@ -81,12 +86,13 @@
           ok = modeSupported(b, "t2v") || modeSupported(b, "i2v");
         }
       }
-      opt.disabled = !ok;
-      opt.hidden = !ok;
+      radio.disabled = !ok;
+      radio.closest(".radio")?.classList.toggle("disabled", !ok);
     }
-    if (outSel.selectedOptions[0]?.disabled) {
-      const first = [...outSel.options].find((o) => !o.disabled);
-      if (first) outSel.value = first.value;
+    const checked = radios.find((r) => r.checked);
+    if (checked?.disabled) {
+      const first = radios.find((r) => !r.disabled);
+      if (first) first.checked = true;
     }
     updateModeHint();
     renderParams();
@@ -97,24 +103,26 @@
     const b = currentBackend();
     const ok = !b || modeSupported(b, mode);
     const src = state.slots.length ? "Image" : "Text";
-    const dst = $("outputKind").value === "video" ? "Video" : "Image";
+    const dst = outputKind() === "video" ? "Video" : "Image";
     $("modeHint").textContent = ok
       ? `mode: ${mode} · ${src} → ${dst} (auto)`
       : `mode: ${mode} · unsupported on ${b?.name || "?"}`;
     $("modeHint").style.color = ok ? "" : "var(--danger)";
   }
 
-  function renderParams() {
+  function renderParams(preset) {
     const b = currentBackend();
     const mode = resolvedMode();
     const schema = b?.param_schema || {};
     const box = $("params");
     box.innerHTML = "";
     state.paramSchema = schema;
+    const values = preset && typeof preset === "object" ? preset : {};
     for (const [key, def] of Object.entries(schema)) {
       const modes = def.modes || [];
       if (modes.length && !modes.includes(mode)) continue;
       const label = document.createElement("label");
+      const hasPreset = Object.prototype.hasOwnProperty.call(values, key);
       if (def.type === "string" && def.enum) {
         label.innerHTML = `<span>${key}</span>`;
         const sel = document.createElement("select");
@@ -123,7 +131,7 @@
           const o = document.createElement("option");
           o.value = v;
           o.textContent = v;
-          if (v === def.default) o.selected = true;
+          if (hasPreset ? v === values[key] : v === def.default) o.selected = true;
           sel.appendChild(o);
         }
         label.appendChild(sel);
@@ -132,14 +140,15 @@
         const input = document.createElement("input");
         input.type = "checkbox";
         input.dataset.param = key;
-        input.checked = !!def.default;
+        input.checked = hasPreset ? !!values[key] : !!def.default;
         label.appendChild(input);
       } else if (def.type === "integer" || def.type === "number") {
         label.innerHTML = `<span>${key}</span>`;
         const input = document.createElement("input");
         input.type = "number";
         input.dataset.param = key;
-        if (def.default != null) input.value = def.default;
+        if (hasPreset) input.value = values[key];
+        else if (def.default != null) input.value = def.default;
         if (def.minimum != null) input.min = def.minimum;
         if (def.maximum != null) input.max = def.maximum;
         if (def.type === "number") input.step = "any";
@@ -150,12 +159,48 @@
         const input = document.createElement("input");
         input.type = "text";
         input.dataset.param = key;
-        input.value = def.default ?? "";
+        input.value = hasPreset ? values[key] ?? "" : (def.default ?? "");
         if (def.description) input.title = def.description;
         label.appendChild(input);
       }
       box.appendChild(label);
     }
+  }
+
+  function setOutputKind(kind) {
+    const radio = document.querySelector(`input[name="outputKind"][value="${kind}"]`);
+    if (radio && !radio.disabled) radio.checked = true;
+  }
+
+  /** Restore compose panel from a generated node's prompt / parents / params. */
+  function restoreSetup(node) {
+    if (!node) return;
+    // Backend
+    if (node.backend && node.backend !== "upload") {
+      const sel = $("backend");
+      if ([...sel.options].some((o) => o.value === node.backend)) {
+        sel.value = node.backend;
+      }
+    }
+    // Output kind from media kind or stored mode
+    const mode = node.params?.mode;
+    if (mode === "t2v" || mode === "i2v" || node.kind === "video") {
+      setOutputKind("video");
+    } else {
+      setOutputKind("image");
+    }
+    // Inputs used for generation
+    const parents = (node.parent_ids || []).filter((pid) => state.media.some((m) => m.id === pid));
+    state.slots = [...parents];
+    // Prompt (already stripped of @refs at generate time — fine to restore as-is)
+    $("prompt").value = node.prompt || "";
+    refreshModeOptions();
+    renderSlots();
+    // Re-apply after mode/backend settle
+    const { mode: _m, ...rest } = node.params || {};
+    renderParams(rest);
+    updateModeHint();
+    setStatus("setup restored");
   }
 
   function collectParams() {
@@ -281,12 +326,14 @@
     const meta = $("previewMeta");
     const dl = $("download");
     const use = $("useAsInput");
+    const restore = $("restoreSetup");
     if (!node) {
       stage.className = "preview-stage empty";
       stage.textContent = "Select or generate media";
       meta.textContent = "";
       dl.classList.add("hidden");
       use.classList.add("hidden");
+      restore.classList.add("hidden");
       return;
     }
     stage.className = "preview-stage";
@@ -300,6 +347,7 @@
       `kind=${node.kind}`,
       node.prompt ? `prompt=${node.prompt}` : null,
       node.params?.mode ? `mode=${node.params.mode}` : null,
+      node.parent_ids?.length ? `parents=${node.parent_ids.length}` : null,
       node.created_at || null,
     ]
       .filter(Boolean)
@@ -314,6 +362,18 @@
       updateModeHint();
       renderParams();
     };
+    // Show restore when there is something to restore (generated nodes)
+    const canRestore =
+      node.backend &&
+      node.backend !== "upload" &&
+      (node.prompt || (node.parent_ids && node.parent_ids.length) || node.params?.mode);
+    if (canRestore) {
+      restore.classList.remove("hidden");
+      restore.onclick = () => restoreSetup(node);
+    } else {
+      restore.classList.add("hidden");
+      restore.onclick = null;
+    }
     renderGallery();
     renderTree();
   }
@@ -451,10 +511,12 @@
   }
 
   $("backend").onchange = refreshModeOptions;
-  $("outputKind").onchange = () => {
-    updateModeHint();
-    renderParams();
-  };
+  document.querySelectorAll('input[name="outputKind"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      updateModeHint();
+      renderParams();
+    });
+  });
   $("clearSlots").onclick = () => {
     state.slots = [];
     renderSlots();
