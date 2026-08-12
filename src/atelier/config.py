@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     http_timeout: float = Field(default=60.0, alias="ATELIER_HTTP_TIMEOUT")
     video_timeout: float = Field(default=600.0, alias="ATELIER_VIDEO_TIMEOUT")
 
+    # Dev: register offline Echo backend
+    include_echo_backend: bool = Field(default=False, alias="ATELIER_ECHO")
+
     def ensure_data_dir(self) -> Path:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         return self.data_dir

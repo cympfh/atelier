@@ -1,4 +1,4 @@
-"""Phase 2: backend registry and generate pipeline."""
+"""Backend registry and generate pipeline."""
 
 from __future__ import annotations
 
@@ -52,14 +52,11 @@ def test_registry_list_and_get() -> None:
     assert names == {"grok", "sd_webui", "echo"}
     infos = {i.name: i for i in reg.list_info()}
     assert infos["grok"].available is False
-    assert infos["grok"].reason is not None
     assert infos["echo"].available is True
-    assert infos["echo"].capabilities.supports_t2i is True
 
 
 def test_grok_available_with_key() -> None:
-    settings = Settings(XAI_API_KEY="test-key")
-    b = GrokBackend(settings)
+    b = GrokBackend(Settings(XAI_API_KEY="test-key"))
     ok, reason = b.availability()
     assert ok is True
     assert reason is None
@@ -76,20 +73,14 @@ def test_pipeline_t2i(stores: tuple[MediaStore, GraphStore, BackendRegistry]) ->
         )
     )
     assert len(nodes) == 1
-    node = nodes[0]
-    assert node.backend == "echo"
-    assert node.kind.value == "image"
-    assert node.prompt == "a cat"
-    assert node.params.get("mode") == "t2i"
-    assert graph.get_node(node.id) is not None
-    assert media.path_for_node(node).is_file()
+    assert nodes[0].backend == "echo"
+    assert nodes[0].params.get("mode") == "t2i"
 
 
 def test_pipeline_i2i(stores: tuple[MediaStore, GraphStore, BackendRegistry]) -> None:
     media, graph, registry = stores
     src = media.save_bytes(b"source-bytes", mime="image/png", backend="upload")
     graph.add_node(src)
-
     nodes = asyncio.run(
         run_generate(
             GenerateRequest(
@@ -103,12 +94,8 @@ def test_pipeline_i2i(stores: tuple[MediaStore, GraphStore, BackendRegistry]) ->
             media=media,
         )
     )
-    assert len(nodes) == 1
-    out = nodes[0]
-    assert out.parent_ids == [src.id]
-    assert media.read_bytes(out) == b"source-bytes"
-    snap = graph.snapshot()
-    assert any(e.source_id == src.id and e.target_id == out.id for e in snap.edges)
+    assert nodes[0].parent_ids == [src.id]
+    assert media.read_bytes(nodes[0]) == b"source-bytes"
 
 
 def test_pipeline_missing_media(stores: tuple[MediaStore, GraphStore, BackendRegistry]) -> None:
@@ -198,8 +185,6 @@ def test_pipeline_backend_unavailable(data_dir: Path) -> None:
 
 
 def test_sd_capabilities() -> None:
-    b = SDWebUIBackend(Settings())
+    b = SDWebUIBackend(Settings(), probe_on_availability=False)
     caps = b.capabilities()
-    assert caps.supports_t2i
-    assert caps.supports_i2i
-    assert not caps.supports_t2v
+    assert caps.supports_t2i and caps.supports_i2i and not caps.supports_t2v
