@@ -84,3 +84,36 @@ def test_generate_invalid_mode_echo(client: TestClient) -> None:
         json={"mode": "t2v", "backend": "echo", "prompt": "x"},
     )
     assert r.status_code == 400
+    assert r.json()["detail"]["error"] == "mode_not_supported"
+
+
+def test_async_job_echo(client: TestClient) -> None:
+    r = client.post(
+        "/api/generate",
+        json={"mode": "t2i", "backend": "echo", "prompt": "async rock", "async_job": True},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["job_id"]
+    assert body["nodes"] == []
+    job_id = body["job_id"]
+
+    # Poll until done (TestClient runs background tasks on the event loop)
+    import time
+
+    final = None
+    for _ in range(50):
+        jr = client.get(f"/api/jobs/{job_id}")
+        assert jr.status_code == 200
+        final = jr.json()
+        if final["status"] in ("done", "failed"):
+            break
+        time.sleep(0.05)
+    assert final is not None
+    assert final["status"] == "done", final
+    assert len(final["nodes"]) == 1
+    assert final["nodes"][0]["prompt"] == "async rock"
+
+    listed = client.get("/api/jobs")
+    assert listed.status_code == 200
+    assert any(j["id"] == job_id for j in listed.json())

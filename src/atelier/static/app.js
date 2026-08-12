@@ -94,6 +94,13 @@
           sel.appendChild(o);
         }
         label.appendChild(sel);
+      } else if (def.type === "boolean") {
+        label.innerHTML = `<span>${key}</span>`;
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.dataset.param = key;
+        input.checked = !!def.default;
+        label.appendChild(input);
       } else if (def.type === "integer" || def.type === "number") {
         label.innerHTML = `<span>${key}</span>`;
         const input = document.createElement("input");
@@ -111,6 +118,7 @@
         input.type = "text";
         input.dataset.param = key;
         input.value = def.default ?? "";
+        if (def.description) input.title = def.description;
         label.appendChild(input);
       }
       box.appendChild(label);
@@ -122,9 +130,10 @@
     for (const el of $("params").querySelectorAll("[data-param]")) {
       const key = el.dataset.param;
       const def = state.paramSchema[key] || {};
-      let v = el.value;
+      let v = el.type === "checkbox" ? el.checked : el.value;
       if (def.type === "integer") v = v === "" ? def.default : parseInt(v, 10);
       else if (def.type === "number") v = v === "" ? def.default : parseFloat(v);
+      else if (def.type === "boolean") v = !!v;
       if (v !== "" && v != null && !(typeof v === "number" && Number.isNaN(v))) params[key] = v;
     }
     return params;
@@ -309,28 +318,54 @@
     renderSlots();
   };
 
+  async function pollJob(jobId) {
+    const started = Date.now();
+    const maxMs = 15 * 60 * 1000;
+    while (Date.now() - started < maxMs) {
+      const job = await api(`/api/jobs/${jobId}`);
+      setStatus(`job ${job.status}…`);
+      if (job.status === "done") return job;
+      if (job.status === "failed") {
+        const err = new Error("job failed");
+        err.detail = job.error || job;
+        throw err;
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    throw Object.assign(new Error("job timeout"), { detail: "polling timed out" });
+  }
+
   $("generate").onclick = async () => {
     showError(null);
     const btn = $("generate");
     btn.disabled = true;
     setStatus("generating…");
     try {
+      const mode = $("mode").value;
       const body = {
-        mode: $("mode").value,
+        mode,
         backend: $("backend").value,
         prompt: $("prompt").value,
         media_ids: [...state.slots],
         input_slots: [...state.slots],
         params: collectParams(),
         resolve_at_refs: true,
+        // video auto-async on server; force async for long image jobs if needed
+        async_job: mode === "t2v" || mode === "i2v",
       };
       const res = await api("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      let nodes = res.nodes || [];
+      if (res.job_id) {
+        setStatus(`queued ${res.job_id.slice(0, 8)}…`);
+        const job = await pollJob(res.job_id);
+        nodes = job.nodes || [];
+      }
       await refresh();
-      if (res.nodes?.[0]) selectMedia(res.nodes[0].id);
+      if (nodes[0]) selectMedia(nodes[0].id);
       setStatus("done");
     } catch (e) {
       showError(e);

@@ -95,7 +95,7 @@ image data URI + prompt → 動画。
 mode/backend/prompt/media_ids/params。同期で nodes 返却。
 
 ## [x] 生成進捗・長時間ジョブ対応（必要なら） [2026-08-12 18:38 完了]
-同期のまま。動画はサーバー側ポーリング + `ATELIER_VIDEO_TIMEOUT`。ジョブキューは任意未着手。
+動画 mode / `async_job` で JobQueue 非同期。xAI 動画はクライアント内ポーリング + `ATELIER_VIDEO_TIMEOUT`。
 
 ## [x] バックエンド一覧 API [2026-08-12 18:38 完了]
 `GET /api/backends` + capabilities + param_schema。
@@ -216,8 +216,8 @@ README に記載。
 ## [x] エラー・エッジケース [2026-08-12 18:38 完了]
 空プロンプト・未対応 mode・キー無し・不正 media id をテスト/検証。
 
-## [ ] （任意）非同期ジョブキュー
-動画生成の待ち時間改善。優先度低。完了条件からは外してよい。
+## [x] （任意）非同期ジョブキュー [2026-08-12 18:45 完了]
+`jobs.py` JobQueue。`POST /api/generate` の `async_job` または video mode で即 `job_id` 返却。`GET /api/jobs` / `GET /api/jobs/{id}` ポーリング。UI も poll 対応。
 
-## [ ] （任意）LoRA / 拡張 SD パラメータ
-WebUI の alwayson_scripts 等。WAI 本体動作の後で検討。
+## [x] （任意）LoRA / 拡張 SD パラメータ [2026-08-12 18:45 完了]
+`lora`（name:weight → `<lora:>`）、clip_skip、restore_faces、hires fix、alwayson_scripts JSON。テストで payload 検証。

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import base64
+import json
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -21,6 +23,11 @@ from atelier.config import Settings
 log = logging.getLogger(__name__)
 
 DEFAULT_CHECKPOINT_HINT = "WAI-NSFW-illustrious-SDXL"
+
+# name:weight or name (weight defaults to 1.0), comma-separated
+_LORA_ENTRY = re.compile(
+    r"^\s*([^:<,]+?)(?::\s*([+-]?\d+(?:\.\d+)?))?\s*$",
+)
 
 SD_PARAM_SCHEMA: dict[str, Any] = {
     "negative_prompt": {"type": "string", "default": "", "modes": ["t2i", "i2i"]},
@@ -43,7 +50,119 @@ SD_PARAM_SCHEMA: dict[str, Any] = {
         "description": f"sd_model_checkpoint title; prefer {DEFAULT_CHECKPOINT_HINT} if installed",
         "modes": ["t2i", "i2i"],
     },
+    # LoRA: "my_lora:0.8, other_lora:0.5" → <lora:my_lora:0.8> appended to prompt
+    "lora": {
+        "type": "string",
+        "default": "",
+        "description": "Comma-separated LoRAs as name:weight (A1111 <lora:name:w>)",
+        "modes": ["t2i", "i2i"],
+    },
+    "clip_skip": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 12,
+        "default": 2,
+        "modes": ["t2i", "i2i"],
+    },
+    "restore_faces": {"type": "boolean", "default": False, "modes": ["t2i", "i2i"]},
+    "enable_hr": {"type": "boolean", "default": False, "modes": ["t2i"]},
+    "hr_scale": {"type": "number", "minimum": 1, "maximum": 4, "default": 1.5, "modes": ["t2i"]},
+    "hr_upscaler": {"type": "string", "default": "Latent", "modes": ["t2i"]},
+    "hr_second_pass_steps": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 150,
+        "default": 0,
+        "modes": ["t2i"],
+    },
+    # Advanced: JSON object string for alwayson_scripts (ControlNet, etc.)
+    "alwayson_scripts": {
+        "type": "string",
+        "default": "",
+        "description": 'JSON object for A1111 alwayson_scripts, e.g. {"ControlNet": {...}}',
+        "modes": ["t2i", "i2i"],
+    },
 }
+
+
+def apply_loras_to_prompt(prompt: str, lora_spec: str | list[Any] | None) -> str:
+    """Append <lora:name:weight> tags from a user-friendly spec."""
+    tags = parse_lora_tags(lora_spec)
+    if not tags:
+        return prompt
+    # Avoid duplicating tags already present
+    extra = [t for t in tags if t not in prompt]
+    if not extra:
+        return prompt
+    base = prompt.rstrip()
+    return f"{base} {' '.join(extra)}".strip()
+
+
+def parse_lora_tags(lora_spec: str | list[Any] | None) -> list[str]:
+    if not lora_spec:
+        return []
+    if isinstance(lora_spec, list):
+        tags: list[str] = []
+        for item in lora_spec:
+            if isinstance(item, str):
+                tags.extend(parse_lora_tags(item))
+            elif isinstance(item, dict):
+                name = item.get("name") or item.get("lora")
+                weight = item.get("weight", 1.0)
+                if name:
+                    tags.append(f"<lora:{name}:{weight}>")
+        return tags
+
+    text = str(lora_spec).strip()
+    if not text:
+        return []
+    # Already full tags
+    if "<lora:" in text:
+        return re.findall(r"<lora:[^>]+>", text) or [text]
+
+    tags = []
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        m = _LORA_ENTRY.match(part)
+        if not m:
+            continue
+        name = m.group(1).strip()
+        weight = m.group(2) if m.group(2) is not None else "1.0"
+        tags.append(f"<lora:{name}:{weight}>")
+    return tags
+
+
+def _as_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    s = str(value).strip().lower()
+    if s in ("1", "true", "yes", "on"):
+        return True
+    if s in ("0", "false", "no", "off", ""):
+        return False
+    return default
+
+
+def _parse_json_param(value: Any) -> dict[str, Any] | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            data = json.loads(value)
+        except json.JSONDecodeError as e:
+            raise GenerationError(f"invalid alwayson_scripts JSON: {e}") from e
+        if not isinstance(data, dict):
+            raise GenerationError("alwayson_scripts must be a JSON object")
+        return data
+    raise GenerationError("alwayson_scripts must be object or JSON string")
 
 
 class SDWebUIBackend(Backend):
@@ -78,7 +197,6 @@ class SDWebUIBackend(Backend):
             return False, "SD_WEBUI_URL is not set"
         if not self._probe:
             return True, None
-        # Sync probe via httpx (short); used by list_info
         try:
             with httpx.Client(timeout=3.0) as c:
                 r = c.get(f"{self._settings.sd_webui_url.rstrip('/')}/sdapi/v1/sd-models")
@@ -137,8 +255,9 @@ class SDWebUIBackend(Backend):
         raise GenerationError(f"SD WebUI does not support mode {mode.value}")
 
     def _common_payload(self, prompt: str, params: dict[str, Any]) -> dict[str, Any]:
+        final_prompt = apply_loras_to_prompt(prompt, params.get("lora"))
         payload: dict[str, Any] = {
-            "prompt": prompt,
+            "prompt": final_prompt,
             "negative_prompt": params.get("negative_prompt", ""),
             "steps": int(params.get("steps", 28)),
             "cfg_scale": float(params.get("cfg_scale", 7.0)),
@@ -148,10 +267,33 @@ class SDWebUIBackend(Backend):
             "seed": int(params.get("seed", -1)),
             "batch_size": 1,
             "n_iter": 1,
+            "restore_faces": _as_bool(params.get("restore_faces"), False),
         }
+
+        override: dict[str, Any] = {}
         ckpt = params.get("checkpoint") or params.get("sd_model_checkpoint")
         if ckpt:
-            payload["override_settings"] = {"sd_model_checkpoint": ckpt}
+            override["sd_model_checkpoint"] = ckpt
+        if params.get("clip_skip") is not None and params.get("clip_skip") != "":
+            override["CLIP_stop_at_last_layers"] = int(params["clip_skip"])
+        if override:
+            payload["override_settings"] = override
+            payload["override_settings_restore_afterwards"] = True
+
+        if _as_bool(params.get("enable_hr"), False):
+            payload["enable_hr"] = True
+            payload["hr_scale"] = float(params.get("hr_scale", 1.5))
+            payload["hr_upscaler"] = params.get("hr_upscaler", "Latent")
+            hr_steps = int(params.get("hr_second_pass_steps", 0) or 0)
+            if hr_steps:
+                payload["hr_second_pass_steps"] = hr_steps
+            if params.get("denoising_strength") is not None:
+                payload["denoising_strength"] = float(params["denoising_strength"])
+
+        scripts = _parse_json_param(params.get("alwayson_scripts"))
+        if scripts:
+            payload["alwayson_scripts"] = scripts
+
         return payload
 
     async def _post_images(self, path: str, payload: dict[str, Any]) -> list[GeneratedAsset]:
@@ -172,7 +314,6 @@ class SDWebUIBackend(Backend):
             raise GenerationError("SD WebUI returned no images")
         out: list[GeneratedAsset] = []
         for b64 in images:
-            # strip data uri prefix if present
             if isinstance(b64, str) and "," in b64 and b64.startswith("data:"):
                 b64 = b64.split(",", 1)[1]
             raw = base64.b64decode(b64)
@@ -187,6 +328,12 @@ class SDWebUIBackend(Backend):
                         "height": payload.get("height"),
                         "sampler_name": payload.get("sampler_name"),
                         "seed": payload.get("seed"),
+                        "prompt": payload.get("prompt"),
+                        "enable_hr": payload.get("enable_hr"),
+                        "loras": parse_lora_tags(
+                            # re-extract from final prompt tags only for metadata
+                            " ".join(re.findall(r"<lora:[^>]+>", payload.get("prompt") or ""))
+                        ),
                     },
                 )
             )

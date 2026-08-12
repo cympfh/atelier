@@ -17,7 +17,7 @@ uv run atelier start
 
 ## 現状
 
-フェーズ 0–9 実装済み（任意項目: 非同期ジョブキュー・LoRA 拡張は未着手）。
+フェーズ 0–9 実装済み（任意: JobQueue 非同期・SD LoRA/alwayson_scripts 含む）。
 
 ## ディレクトリ構成
 
@@ -25,13 +25,14 @@ uv run atelier start
 src/atelier/
   cli.py / app.py / config.py
   refs.py                 # @ImageN / @VideoN
+  jobs.py                 # async JobQueue
   backends/
     base.py registry.py pipeline.py types.py
     grok_client.py grok.py
-    sd_webui.py echo.py
+    sd_webui.py echo.py   # LoRA / hires / alwayson_scripts
   graph/models.py store.py
   media/store.py
-  api/media.py generate.py
+  api/media.py generate.py  # + /api/jobs
   static/                 # SPA (index.html app.js app.css)
 tests/
 ```

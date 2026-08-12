@@ -56,7 +56,9 @@ uv run atelier start
 | GET | `/api/media/{id}` | メタデータ |
 | GET | `/api/media/{id}/file` | 本体 |
 | POST | `/api/media/upload` | アップロード (`file`) |
-| POST | `/api/generate` | 生成ジョブ |
+| POST | `/api/generate` | 生成ジョブ（同期 or 非同期） |
+| GET | `/api/jobs` | ジョブ一覧 |
+| GET | `/api/jobs/{id}` | ジョブ状態ポーリング |
 | GET | `/api/graph` | ノード + エッジ |
 | GET | `/api/sd/models` | SD チェックポイント一覧 |
 
@@ -70,9 +72,27 @@ uv run atelier start
   "media_ids": ["..."],
   "input_slots": ["..."],
   "params": { "aspect_ratio": "1:1" },
-  "resolve_at_refs": true
+  "resolve_at_refs": true,
+  "async_job": false
 }
 ```
+
+- `async_job: true` または mode が `t2v` / `i2v` のとき: 即 `{ "job_id", "status": "pending" }` を返す → `GET /api/jobs/{id}` で poll
+- 同期時: `{ "nodes": [...], "status": "done" }`
+
+### SD 拡張 params 例
+
+```json
+{
+  "lora": "detail_tweaker:0.7, lighting:0.5",
+  "clip_skip": 2,
+  "enable_hr": true,
+  "hr_scale": 1.5,
+  "alwayson_scripts": "{\"ControlNet\": {\"args\": []}}"
+}
+```
+
+`lora` はプロンプト末尾に `<lora:name:weight>` を付与（A1111 形式）。
 
 ## 開発
 

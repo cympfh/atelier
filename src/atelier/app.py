@@ -11,6 +11,7 @@ from atelier.api import build_api_router
 from atelier.backends import build_default_registry
 from atelier.config import Settings, get_settings
 from atelier.graph.store import GraphStore
+from atelier.jobs import JobQueue
 from atelier.media.store import MediaStore
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -25,6 +26,11 @@ def create_app(settings: Settings | None = None, *, include_echo: bool = False) 
     app.state.media_store = MediaStore(data_dir)
     app.state.graph_store = GraphStore(data_dir)
     app.state.backend_registry = build_default_registry(settings, include_echo=include_echo)
+    app.state.job_queue = JobQueue(
+        registry=app.state.backend_registry,
+        graph=app.state.graph_store,
+        media=app.state.media_store,
+    )
 
     app.include_router(build_api_router())
 
