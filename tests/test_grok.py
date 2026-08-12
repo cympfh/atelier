@@ -83,9 +83,10 @@ def test_grok_i2i_mock() -> None:
     assert len(assets) == 1
     assert any("/images/edits" in c[1] for c in transport.calls)
     body = next(c[2] for c in transport.calls if c[0] == "POST" and "/images/edits" in c[1])
-    # single image: string data URI (not {url, type} map)
-    assert isinstance(body["image"], str)
-    assert body["image"].startswith("data:image/png;base64,")
+    # single image: {url, type} map (bare string → 422)
+    assert isinstance(body["image"], dict)
+    assert body["image"]["type"] == "image_url"
+    assert body["image"]["url"].startswith("data:image/png;base64,")
 
 
 def test_grok_i2i_multi_image_payload() -> None:
@@ -99,6 +100,7 @@ def test_grok_i2i_multi_image_payload() -> None:
     assets = asyncio.run(backend.generate(GenerateMode.i2i, "combine", inputs, {}))
     assert len(assets) == 1
     body = next(c[2] for c in transport.calls if c[0] == "POST" and "/images/edits" in c[1])
+    # multi: array of strings (map elements → 422)
     assert isinstance(body["image"], list)
     assert len(body["image"]) == 2
     assert all(isinstance(u, str) and u.startswith("data:") for u in body["image"])

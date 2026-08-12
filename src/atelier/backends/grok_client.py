@@ -139,10 +139,14 @@ class GrokClient:
             "n": n,
             "response_format": response_format,
         }
-        # xAI expects URL / data-URI *strings* (not {url, type} maps).
-        # Multi-image: array of up to 3 strings → image[0], image[1], ...
+        # xAI image field schema differs by cardinality:
+        # - single: object {url, type} (string alone → 422 "expected map")
+        # - multi:  array of URL/data-URI strings (map elements → 422 "expected string")
         uris = list(image_uris[:3])
-        body["image"] = uris[0] if len(uris) == 1 else uris
+        if len(uris) == 1:
+            body["image"] = {"url": uris[0], "type": "image_url"}
+        else:
+            body["image"] = uris
 
         data = await self._request("POST", "/images/edits", json=body)
         return await self._collect_image_payloads(data)

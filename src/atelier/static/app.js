@@ -435,7 +435,6 @@
       : "Cannot delete: has child generations in the tree";
     del.onclick = leaf
       ? async () => {
-          if (!confirm("Delete this media? (leaf only)")) return;
           showError(null);
           try {
             const res = await fetch(`/api/media/${id}`, { method: "DELETE" });
