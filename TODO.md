@@ -221,3 +221,15 @@ README に記載。
 
 ## [x] （任意）LoRA / 拡張 SD パラメータ [2026-08-12 18:45 完了]
 `lora`（name:weight → `<lora:>`）、clip_skip、restore_faces、hires fix、alwayson_scripts JSON。テストで payload 検証。
+
+## [x] 要望 [2026-08-12 18:48 完了]
+
+- Prompt は Ctrl+Enter で Generate 送信する → 実装
+- lineage 名前付き保存/一覧/切替 → `lineage.py` + `/api/lineages*` + ヘッダー UI
+- 未保存時は `YYYY-MM-DD_HH-MM-SS` で自動作成
+- 10秒おき `POST /api/lineages/current/save` で graph + meta を flush
+- 各 lineage は `data/lineages/{id}/{graph.json,files/,meta.json}` にノード・メディア・prompt 等を保持
+
+## [ ] Upload ボタンの代わりに「ここに画像をD&D」という領域を配置する
+
+大きすぎる画像の場合はリサイズして使用する

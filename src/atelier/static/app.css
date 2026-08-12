@@ -27,10 +27,23 @@ body {
 }
 
 #app { max-width: 1400px; margin: 0 auto; padding: 1.25rem 1.5rem 3rem; }
-.top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1.25rem; }
+.top {
+  display: flex; flex-wrap: wrap; gap: 0.75rem 1rem;
+  justify-content: space-between; align-items: center; margin-bottom: 1.25rem;
+}
 .logo { font-size: 1.5rem; font-weight: 600; letter-spacing: 0.04em; }
 .tag { color: var(--muted); margin-left: 0.75rem; font-size: 0.85rem; }
 .status { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+.lineage-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem;
+  flex: 1; justify-content: center;
+}
+.lineage-pick { display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: var(--muted); }
+.lineage-bar select, .lineage-bar input[type="text"] {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); padding: 0.35rem 0.5rem; font: inherit; font-size: 0.85rem;
+}
+.lineage-bar input[type="text"] { min-width: 12rem; }
 
 .layout {
   display: grid;

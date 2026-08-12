@@ -10,9 +10,8 @@ from atelier import __version__
 from atelier.api import build_api_router
 from atelier.backends import build_default_registry
 from atelier.config import Settings, get_settings
-from atelier.graph.store import GraphStore
 from atelier.jobs import JobQueue
-from atelier.media.store import MediaStore
+from atelier.lineage import LineageManager
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -21,15 +20,35 @@ def create_app(settings: Settings | None = None, *, include_echo: bool = False) 
     settings = settings or get_settings()
     data_dir = settings.ensure_data_dir()
 
+    lineages = LineageManager(data_dir)
+    registry = build_default_registry(settings, include_echo=include_echo)
+
     app = FastAPI(title="atelier", version=__version__)
     app.state.settings = settings
-    app.state.media_store = MediaStore(data_dir)
-    app.state.graph_store = GraphStore(data_dir)
-    app.state.backend_registry = build_default_registry(settings, include_echo=include_echo)
+    app.state.lineage_manager = lineages
+    app.state.graph_store = lineages.graph_store
+    app.state.media_store = lineages.media_store
+    app.state.backend_registry = registry
+
+    def sync_active_stores() -> None:
+        app.state.graph_store = lineages.graph_store
+        app.state.media_store = lineages.media_store
+        app.state.job_queue.bind_stores(lineages.graph_store, lineages.media_store)
+
+    app.state.sync_active_stores = sync_active_stores
+
+    def on_job_complete() -> None:
+        try:
+            lineages.touch()
+        except Exception:
+            pass
+        sync_active_stores()
+
     app.state.job_queue = JobQueue(
-        registry=app.state.backend_registry,
-        graph=app.state.graph_store,
-        media=app.state.media_store,
+        registry=registry,
+        graph=lineages.graph_store,
+        media=lineages.media_store,
+        on_complete=on_job_complete,
     )
 
     app.include_router(build_api_router())

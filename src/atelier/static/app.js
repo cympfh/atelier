@@ -7,6 +7,8 @@
     slots: [],
     selectedId: null,
     paramSchema: {},
+    lineages: [],
+    currentLineage: null,
   };
 
   function setStatus(msg) {
@@ -281,15 +283,34 @@
       .replace(/>/g, "&gt;");
   }
 
+  function renderLineages() {
+    const sel = $("lineageSelect");
+    const prev = state.currentLineage?.id;
+    sel.innerHTML = "";
+    for (const L of state.lineages) {
+      const o = document.createElement("option");
+      o.value = L.id;
+      o.textContent = L.name;
+      sel.appendChild(o);
+    }
+    if (prev && state.lineages.some((L) => L.id === prev)) sel.value = prev;
+    else if (state.currentLineage) sel.value = state.currentLineage.id;
+    $("lineageName").value = state.currentLineage?.name || "";
+  }
+
   async function refresh() {
-    const [media, graph, backends] = await Promise.all([
+    const [media, graph, backends, lineages, current] = await Promise.all([
       api("/api/media"),
       api("/api/graph"),
       api("/api/backends"),
+      api("/api/lineages"),
+      api("/api/lineages/current"),
     ]);
     state.media = media;
     state.graph = graph;
     state.backends = backends;
+    state.lineages = lineages;
+    state.currentLineage = current;
     const sel = $("backend");
     const prev = sel.value;
     sel.innerHTML = "";
@@ -305,10 +326,16 @@
       if (prefer) sel.value = prefer.name;
     }
     refreshModeOptions();
+    renderLineages();
     renderGallery();
     renderTree();
     renderSlots();
-    if (state.selectedId) selectMedia(state.selectedId);
+    if (state.selectedId && state.media.some((m) => m.id === state.selectedId)) {
+      selectMedia(state.selectedId);
+    } else {
+      state.selectedId = null;
+      selectMedia(null);
+    }
   }
 
   $("backend").onchange = refreshModeOptions;
@@ -317,6 +344,85 @@
     state.slots = [];
     renderSlots();
   };
+
+  $("prompt").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+      ev.preventDefault();
+      $("generate").click();
+    }
+  });
+
+  $("lineageSelect").onchange = async () => {
+    showError(null);
+    try {
+      await api("/api/lineages/current", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: $("lineageSelect").value }),
+      });
+      state.slots = [];
+      state.selectedId = null;
+      await refresh();
+      setStatus("lineage switched");
+    } catch (e) {
+      showError(e);
+    }
+  };
+
+  $("lineageRename").onclick = async () => {
+    const name = $("lineageName").value.trim();
+    if (!name || !state.currentLineage) return;
+    try {
+      await api(`/api/lineages/${state.currentLineage.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      await refresh();
+      setStatus("renamed");
+    } catch (e) {
+      showError(e);
+    }
+  };
+
+  $("lineageNew").onclick = async () => {
+    try {
+      await api("/api/lineages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      state.slots = [];
+      state.selectedId = null;
+      await refresh();
+      setStatus("new lineage");
+    } catch (e) {
+      showError(e);
+    }
+  };
+
+  $("lineageSave").onclick = async () => {
+    try {
+      const name = $("lineageName").value.trim();
+      if (name && state.currentLineage && name !== state.currentLineage.name) {
+        await api(`/api/lineages/${state.currentLineage.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+      }
+      await api("/api/lineages/current/save", { method: "POST" });
+      await refresh();
+      setStatus("saved");
+    } catch (e) {
+      showError(e);
+    }
+  };
+
+  // Autosave every 10s (graph already persists on mutation; flush meta + graph)
+  setInterval(() => {
+    api("/api/lineages/current/save", { method: "POST" }).catch(() => {});
+  }, 10000);
 
   async function pollJob(jobId) {
     const started = Date.now();

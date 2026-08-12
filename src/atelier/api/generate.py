@@ -189,4 +189,11 @@ async def generate(body: GenerateBody, request: Request) -> GenerateResponse:
     except AtelierError as e:
         raise _http_error(e) from e
 
+    lm = getattr(request.app.state, "lineage_manager", None)
+    if lm is not None:
+        try:
+            lm.touch()
+        except Exception:
+            pass
+
     return GenerateResponse(nodes=nodes, job_id=None, status="done")

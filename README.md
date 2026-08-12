@@ -61,6 +61,14 @@ uv run atelier start
 | GET | `/api/jobs/{id}` | ジョブ状態ポーリング |
 | GET | `/api/graph` | ノード + エッジ |
 | GET | `/api/sd/models` | SD チェックポイント一覧 |
+| GET | `/api/lineages` | lineage 一覧 |
+| GET | `/api/lineages/current` | 作業中 lineage |
+| POST | `/api/lineages` | 新規作成して切替 |
+| POST | `/api/lineages/current` | 切替 `{ "id" }` |
+| PATCH | `/api/lineages/{id}` | リネーム |
+| POST | `/api/lineages/current/save` | 保存 / オートセーブ |
+
+UI: ヘッダーで lineage 選択・改名・新規。Prompt は **Ctrl+Enter** で Generate。10秒ごと自動保存。
 
 ### `POST /api/generate`
 

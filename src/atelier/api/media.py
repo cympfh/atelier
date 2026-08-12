@@ -81,4 +81,10 @@ async def upload_media(
         original_name=original,
     )
     graph.add_node(node)
+    lm = getattr(request.app.state, "lineage_manager", None)
+    if lm is not None:
+        try:
+            lm.touch()
+        except Exception:
+            pass
     return node

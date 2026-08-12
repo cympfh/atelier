@@ -6,6 +6,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from enum import Enum
+from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
@@ -54,6 +55,7 @@ class JobQueue:
         graph: GraphStore,
         media: MediaStore,
         max_finished: int = 100,
+        on_complete: Callable[[], None] | None = None,
     ) -> None:
         self._registry = registry
         self._graph = graph
@@ -62,6 +64,12 @@ class JobQueue:
         self._lock = asyncio.Lock()
         self._max_finished = max_finished
         self._tasks: set[asyncio.Task[None]] = set()
+        self._on_complete = on_complete
+
+    def bind_stores(self, graph: GraphStore, media: MediaStore) -> None:
+        """Point at the active lineage stores after a switch."""
+        self._graph = graph
+        self._media = media
 
     def get(self, job_id: str) -> Job | None:
         return self._jobs.get(job_id)
@@ -115,3 +123,8 @@ class JobQueue:
         finally:
             job.finished_at = _utc_now()
             job.updated_at = job.finished_at
+            if self._on_complete is not None:
+                try:
+                    self._on_complete()
+                except Exception:
+                    log.exception("job on_complete failed")
