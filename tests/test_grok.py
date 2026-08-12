@@ -95,6 +95,21 @@ def test_grok_i2v_poll_mock() -> None:
     assert assets[0].data == b"fake-mp4"
 
 
+def test_grok_video_edit_from_video_input() -> None:
+    transport = MockTransport()
+    client = GrokClient("key", client=httpx.AsyncClient(transport=transport), video_timeout=30)
+    backend = GrokBackend(Settings(XAI_API_KEY="key"), client=client)
+    vid = MediaInput(id="v1", kind=MediaKind.video, mime="video/mp4", data=b"fake-mp4-src")
+    assets = asyncio.run(backend.generate(GenerateMode.i2v, "add a hat", [vid], {"n": 1}))
+    assert len(assets) == 1
+    gens = [c for c in transport.calls if c[0] == "POST" and "/videos/generations" in c[1]]
+    assert len(gens) == 1
+    body = gens[0][2]
+    assert "video" in body
+    assert body["video"]["url"].startswith("data:video/mp4;base64,")
+    assert assets[0].params.get("edit_video") is True
+
+
 def test_grok_video_n_serial() -> None:
     transport = MockTransport()
     client = GrokClient("key", client=httpx.AsyncClient(transport=transport), video_timeout=30)

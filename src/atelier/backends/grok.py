@@ -196,18 +196,49 @@ class GrokBackend(Backend):
         inputs: list[MediaInput],
         params: dict[str, Any],
     ) -> list[GeneratedAsset]:
+        """Image→video (animate) or video→video (edit) depending on input kind."""
         if not inputs:
-            raise GenerationError("i2v requires an image input")
+            raise GenerationError("i2v requires an image or video input")
+
+        video_in = next((i for i in inputs if i.mime.startswith("video/")), None)
         img = next((i for i in inputs if i.mime.startswith("image/")), None)
-        if img is None:
-            raise GenerationError("i2v requires an image/* input")
+        if video_in is None and img is None:
+            raise GenerationError("i2v requires an image/* or video/* input")
+
         model = str(params.get("video_model") or params.get("model") or DEFAULT_VIDEO_MODEL)
         n = max(1, min(10, int(params.get("n") or 1)))
         duration = params.get("duration")
         aspect = params.get("aspect_ratio")
         resolution = params.get("resolution")
+
+        # Prefer explicit video edit when a video is among inputs
+        if video_in is not None:
+            uri = to_data_uri(video_in.data, video_in.mime)
+            out: list[GeneratedAsset] = []
+            for i in range(n):
+                data, mime = await client.generate_video(
+                    prompt,
+                    model=model,
+                    video_uri=uri,
+                )
+                out.append(
+                    GeneratedAsset(
+                        data=data,
+                        mime=mime,
+                        params={
+                            "model": model,
+                            "n": n,
+                            "index": i,
+                            "edit_video": True,
+                            "source_id": video_in.id,
+                        },
+                    )
+                )
+            return out
+
+        assert img is not None
         uri = to_data_uri(img.data, img.mime)
-        out: list[GeneratedAsset] = []
+        out = []
         for i in range(n):
             data, mime = await client.generate_video(
                 prompt,

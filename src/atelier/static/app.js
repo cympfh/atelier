@@ -65,6 +65,40 @@
     return el ? el.value : "image";
   }
 
+  /** Videos are only valid sources for → Video (Grok video edit / i2v). */
+  function canUseAsInput(node) {
+    if (!node) return false;
+    if (node.kind === "image") return true;
+    if (node.kind === "video") return outputKind() === "video";
+    return false;
+  }
+
+  function addToSlots(id) {
+    const node = state.media.find((m) => m.id === id);
+    if (!canUseAsInput(node)) {
+      showError({
+        detail:
+          node?.kind === "video"
+            ? "Video can only be used as input when Output is → Video (video edit)"
+            : "Cannot use this media as input",
+      });
+      return false;
+    }
+    if (!state.slots.includes(id)) state.slots.push(id);
+    // Drop videos if user later switches to → Image
+    pruneSlotsForOutput();
+    return true;
+  }
+
+  function pruneSlotsForOutput() {
+    if (outputKind() === "image") {
+      state.slots = state.slots.filter((id) => {
+        const n = state.media.find((m) => m.id === id);
+        return n && n.kind === "image";
+      });
+    }
+  }
+
   /** Resolve t2i/i2i/t2v/i2v from output kind + input slots. */
   function resolvedMode() {
     const out = outputKind(); // image | video
@@ -170,6 +204,7 @@
   function setOutputKind(kind) {
     const radio = document.querySelector(`input[name="outputKind"][value="${kind}"]`);
     if (radio && !radio.disabled) radio.checked = true;
+    pruneSlotsForOutput();
   }
 
   /** Restore compose panel from a generated node's prompt / parents / params. */
@@ -305,7 +340,10 @@
         fd.append("file", file);
         const node = await api("/api/media/upload", { method: "POST", body: fd });
         lastId = node.id;
-        if (!state.slots.includes(node.id)) state.slots.push(node.id);
+        // Auto-slot only if valid for current output (videos need → Video)
+        if (canUseAsInput(node) && !state.slots.includes(node.id)) {
+          state.slots.push(node.id);
+        }
       }
       await refresh();
       if (lastId) selectMedia(lastId);
@@ -355,13 +393,20 @@
     dl.href = fileUrl(id);
     dl.download = node.original_name || node.filename || id;
     dl.classList.remove("hidden");
-    use.classList.remove("hidden");
-    use.onclick = () => {
-      if (!state.slots.includes(id)) state.slots.push(id);
-      renderSlots();
-      updateModeHint();
-      renderParams();
-    };
+    if (canUseAsInput(node)) {
+      use.classList.remove("hidden");
+      use.onclick = () => {
+        showError(null);
+        if (addToSlots(id)) {
+          renderSlots();
+          updateModeHint();
+          renderParams();
+        }
+      };
+    } else {
+      use.classList.add("hidden");
+      use.onclick = null;
+    }
     // Show restore when there is something to restore (generated nodes)
     const canRestore =
       node.backend &&
@@ -391,10 +436,12 @@
         `<span class="badge ${backendColor(m.backend)}">${m.backend || m.kind}</span>`;
       el.onclick = () => selectMedia(m.id);
       el.ondblclick = () => {
-        if (!state.slots.includes(m.id)) state.slots.push(m.id);
-        renderSlots();
-        updateModeHint();
-        renderParams();
+        showError(null);
+        if (addToSlots(m.id)) {
+          renderSlots();
+          updateModeHint();
+          renderParams();
+        }
       };
       g.appendChild(el);
     }
@@ -513,8 +560,11 @@
   $("backend").onchange = refreshModeOptions;
   document.querySelectorAll('input[name="outputKind"]').forEach((radio) => {
     radio.addEventListener("change", () => {
+      pruneSlotsForOutput();
+      renderSlots();
       updateModeHint();
       renderParams();
+      if (state.selectedId) selectMedia(state.selectedId);
     });
   });
   $("clearSlots").onclick = () => {

@@ -179,20 +179,37 @@ class GrokClient:
         *,
         model: str = DEFAULT_VIDEO_MODEL,
         image_uri: str | None = None,
+        video_uri: str | None = None,
         duration: int | None = None,
         aspect_ratio: str | None = None,
         resolution: str | None = None,
         poll_interval: float = 3.0,
     ) -> tuple[bytes, str]:
+        """Text/image-to-video, or video edit when video_uri is set.
+
+        Video edit: output inherits duration/aspect from source; duration/aspect/resolution
+        params are ignored by the API for edit mode.
+        """
         body: dict[str, Any] = {"model": model, "prompt": prompt}
-        if image_uri:
+        if video_uri:
+            # Video editing (source video + prompt)
+            body["video"] = {"url": video_uri}
+        elif image_uri:
             body["image"] = {"url": image_uri}
-        if duration is not None:
-            body["duration"] = duration
-        if aspect_ratio:
-            body["aspect_ratio"] = aspect_ratio
-        if resolution:
-            body["resolution"] = resolution
+            if duration is not None:
+                body["duration"] = duration
+            if aspect_ratio:
+                body["aspect_ratio"] = aspect_ratio
+            if resolution:
+                body["resolution"] = resolution
+        else:
+            # Text-to-video
+            if duration is not None:
+                body["duration"] = duration
+            if aspect_ratio:
+                body["aspect_ratio"] = aspect_ratio
+            if resolution:
+                body["resolution"] = resolution
 
         data = await self._request(
             "POST",

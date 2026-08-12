@@ -129,6 +129,26 @@ def test_pipeline_unknown_backend(stores: tuple[MediaStore, GraphStore, BackendR
         )
 
 
+def test_pipeline_i2i_rejects_video(stores: tuple[MediaStore, GraphStore, BackendRegistry]) -> None:
+    media, graph, registry = stores
+    vid = media.save_bytes(b"fake-mp4", mime="video/mp4", backend="upload")
+    graph.add_node(vid)
+    with pytest.raises(InvalidRequestError, match="image inputs only"):
+        asyncio.run(
+            run_generate(
+                GenerateRequest(
+                    mode=GenerateMode.i2i,
+                    backend="echo",
+                    prompt="x",
+                    media_ids=[vid.id],
+                ),
+                registry=registry,
+                graph=graph,
+                media=media,
+            )
+        )
+
+
 def test_pipeline_i2i_requires_input(stores: tuple[MediaStore, GraphStore, BackendRegistry]) -> None:
     media, graph, registry = stores
     with pytest.raises(InvalidRequestError):
