@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from atelier import __version__
 from atelier.api import build_api_router
+from atelier.backends import build_default_registry
 from atelier.config import Settings, get_settings
 from atelier.graph.store import GraphStore
 from atelier.media.store import MediaStore
@@ -15,7 +16,7 @@ from atelier.media.store import MediaStore
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, *, include_echo: bool = False) -> FastAPI:
     settings = settings or get_settings()
     data_dir = settings.ensure_data_dir()
 
@@ -23,6 +24,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.media_store = MediaStore(data_dir)
     app.state.graph_store = GraphStore(data_dir)
+    app.state.backend_registry = build_default_registry(settings, include_echo=include_echo)
 
     app.include_router(build_api_router())
 

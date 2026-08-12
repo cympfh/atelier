@@ -30,9 +30,9 @@ uv run atelier start
 
 ## 現状
 
-- フェーズ 0–1 完了。
-- パッケージ `atelier`、CLI、FastAPI、`MediaNode`/`Graph` 永続化、media API（list/get/file/upload）。
-- 生成バックエンド・UI 本実装は未着手（TODO.md フェーズ 2 以降）。
+- フェーズ 0–2 完了。
+- パッケージ `atelier`、CLI、FastAPI、media/graph 永続化、Backend 抽象 + パイプライン。
+- Grok/SD 本実装・generate HTTP API・UI は未着手（TODO.md フェーズ 3 以降）。
 
 ## ディレクトリ構成
 
@@ -43,7 +43,12 @@ src/atelier/
   cli.py           # argparse CLI (start)
   app.py           # FastAPI factory
   config.py        # pydantic-settings
-  backends/        # Grok / SD WebUI (stub)
+  backends/
+    base.py        # Backend ABC
+    types.py       # GenerateRequest, errors
+    registry.py
+    pipeline.py    # run_generate
+    stubs.py       # Grok/SD placeholders + EchoBackend
   graph/
     models.py      # MediaNode, Edge, Graph
     store.py       # graph.json persistence

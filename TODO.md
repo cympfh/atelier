@@ -50,17 +50,17 @@ black (line-length 120)、ty、pytest を uv dev 依存に追加。README に実
 
 # フェーズ 2: バックエンド抽象
 
-## [ ] Backend プロトコル / 抽象基底
-`generate_image`、`edit_image`、`generate_video`、`image_to_video` 等の共通インターフェース。能力フラグ（supports_t2i, supports_video 等）。
+## [x] Backend プロトコル / 抽象基底 [2026-08-12 18:33 完了]
+`backends/base.py`: `Backend` ABC（`capabilities` / `availability` / `generate`）。能力フラグは `BackendCapabilities`。
 
-## [ ] バックエンドレジストリ
-名前で Backend を解決。利用可能/不可（API キー欠如、SD 未起動）を報告。
+## [x] バックエンドレジストリ [2026-08-12 18:33 完了]
+`BackendRegistry` + `build_default_registry`（grok / sd_webui stubs、任意で echo）。app.state に配線。
 
-## [ ] 生成ジョブリクエスト型
-mode (t2i/i2i/t2v/i2v)、backend、prompt、refs（@参照解決後の media ids）、パラメータ（size, seed, steps 等）。
+## [x] 生成ジョブリクエスト型 [2026-08-12 18:33 完了]
+`GenerateMode` / `GenerateRequest` / `MediaInput` / `GeneratedAsset` / 構造化エラー群（`backends/types.py`）。
 
-## [ ] 生成ジョブ実行パイプライン
-リクエスト受け → @解決 → Backend 呼び出し → ファイル保存 → グラフ更新 → レスポンス。エラーを構造化。
+## [x] 生成ジョブ実行パイプライン [2026-08-12 18:33 完了]
+`run_generate`: media 解決 → 検証 → backend.generate → save + graph。EchoBackend でテスト 11 件。
 
 ---
 
