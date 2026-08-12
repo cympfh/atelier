@@ -82,6 +82,26 @@ def test_grok_i2i_mock() -> None:
     assets = asyncio.run(backend.generate(GenerateMode.i2i, "sketch", [inp], {}))
     assert len(assets) == 1
     assert any("/images/edits" in c[1] for c in transport.calls)
+    body = next(c[2] for c in transport.calls if c[0] == "POST" and "/images/edits" in c[1])
+    # single image: string data URI (not {url, type} map)
+    assert isinstance(body["image"], str)
+    assert body["image"].startswith("data:image/png;base64,")
+
+
+def test_grok_i2i_multi_image_payload() -> None:
+    transport = MockTransport()
+    client = GrokClient("key", client=httpx.AsyncClient(transport=transport))
+    backend = GrokBackend(Settings(XAI_API_KEY="key"), client=client)
+    inputs = [
+        MediaInput(id="a", kind=MediaKind.image, mime="image/png", data=_TINY_PNG),
+        MediaInput(id="b", kind=MediaKind.image, mime="image/png", data=_TINY_PNG),
+    ]
+    assets = asyncio.run(backend.generate(GenerateMode.i2i, "combine", inputs, {}))
+    assert len(assets) == 1
+    body = next(c[2] for c in transport.calls if c[0] == "POST" and "/images/edits" in c[1])
+    assert isinstance(body["image"], list)
+    assert len(body["image"]) == 2
+    assert all(isinstance(u, str) and u.startswith("data:") for u in body["image"])
 
 
 def test_grok_i2v_poll_mock() -> None:

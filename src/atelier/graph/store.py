@@ -55,6 +55,23 @@ class GraphStore:
             self.save()
             return node
 
+    def is_leaf(self, node_id: str) -> bool:
+        with self._lock:
+            return self._graph.is_leaf(node_id)
+
+    def delete_leaf(self, node_id: str) -> MediaNode:
+        """Delete a leaf node. Raises KeyError if missing, ValueError if not a leaf."""
+        with self._lock:
+            if self._graph.get(node_id) is None:
+                raise KeyError(node_id)
+            if not self._graph.is_leaf(node_id):
+                kids = self._graph.children_of(node_id)
+                raise ValueError(f"not a leaf; has children: {kids}")
+            node = self._graph.remove_node(node_id)
+            assert node is not None
+            self.save()
+            return node
+
     def snapshot(self) -> Graph:
         """Return a deep copy for API responses."""
         with self._lock:

@@ -207,7 +207,57 @@ button:hover, .btn:hover { border-color: var(--muted); }
 .preview-stage.empty { color: var(--muted); font-size: 0.9rem; }
 .preview-stage img, .preview-stage video { max-width: 100%; max-height: 480px; display: block; }
 .preview-meta { margin-top: 0.6rem; font-size: 0.8rem; color: var(--muted); font-family: var(--mono); line-height: 1.5; }
-.preview-actions { margin-top: 0.6rem; display: flex; gap: 0.5rem; }
+.preview-actions { margin-top: 0.6rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.preview-actions .btn {
+  border: 1px solid transparent;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+/* Download: cool teal — save out */
+.btn-download {
+  background: linear-gradient(135deg, #1a4a44, #2d8a7a);
+  color: #d8fff6;
+  border-color: #3a9e8c;
+}
+.btn-download:hover {
+  border-color: #85cfc0;
+  filter: brightness(1.12);
+}
+/* Use as input: warm amber — feed into next gen */
+.btn-input {
+  background: linear-gradient(135deg, #6b4518, #c47b4a);
+  color: #fff4e8;
+  border-color: #e8a87c;
+}
+.btn-input:hover {
+  border-color: #f0c49a;
+  filter: brightness(1.12);
+}
+/* Restore setup: cool blue-violet — recall past settings */
+.btn-restore {
+  background: linear-gradient(135deg, #2a3560, #5b6fd6);
+  color: #e8ecff;
+  border-color: #7c9cff;
+}
+.btn-restore:hover {
+  border-color: #a8baff;
+  filter: brightness(1.12);
+}
+/* Delete: red — leaf only */
+.btn-delete {
+  background: linear-gradient(135deg, #5c1a1e, #c23b45);
+  color: #ffe8ea;
+  border-color: #e85a64;
+}
+.btn-delete:hover:not(:disabled) {
+  border-color: #ff8a92;
+  filter: brightness(1.12);
+}
+.btn-delete:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
 
 .gallery-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 0.5rem; max-height: 280px; overflow: auto;

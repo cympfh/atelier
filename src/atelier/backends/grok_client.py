@@ -139,11 +139,10 @@ class GrokClient:
             "n": n,
             "response_format": response_format,
         }
-        # Single image object (documented) or multi-image list
-        if len(image_uris) == 1:
-            body["image"] = {"url": image_uris[0], "type": "image_url"}
-        else:
-            body["image"] = [{"url": u, "type": "image_url"} for u in image_uris[:3]]
+        # xAI expects URL / data-URI *strings* (not {url, type} maps).
+        # Multi-image: array of up to 3 strings → image[0], image[1], ...
+        uris = list(image_uris[:3])
+        body["image"] = uris[0] if len(uris) == 1 else uris
 
         data = await self._request("POST", "/images/edits", json=body)
         return await self._collect_image_payloads(data)

@@ -53,6 +53,37 @@ def get_media_file(node_id: str, request: Request) -> FileResponse:
     )
 
 
+@router.delete("/{node_id}", status_code=204)
+def delete_media(node_id: str, request: Request) -> None:
+    """Delete a leaf media node (no descendants in the lineage tree)."""
+    graph = _graph(request)
+    store = _media(request)
+    try:
+        node = graph.delete_leaf(node_id)
+    except KeyError as e:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "media_not_found", "detail": node_id},
+        ) from e
+    except ValueError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "not_a_leaf", "detail": str(e)},
+        ) from e
+
+    try:
+        store.delete_file(node)
+    except Exception:
+        pass
+
+    lm = getattr(request.app.state, "lineage_manager", None)
+    if lm is not None:
+        try:
+            lm.touch()
+        except Exception:
+            pass
+
+
 @router.post("/upload", response_model=MediaNode, status_code=201)
 async def upload_media(
     request: Request,

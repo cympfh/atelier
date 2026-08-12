@@ -80,3 +80,20 @@ class Graph(BaseModel):
 
     def list_nodes(self) -> list[MediaNode]:
         return sorted(self.nodes.values(), key=lambda n: n.created_at, reverse=True)
+
+    def is_leaf(self, node_id: str) -> bool:
+        """True if no other node was generated from this one (no outgoing edges)."""
+        if node_id not in self.nodes:
+            return False
+        return not any(e.source_id == node_id for e in self.edges)
+
+    def children_of(self, node_id: str) -> list[str]:
+        return [e.target_id for e in self.edges if e.source_id == node_id]
+
+    def remove_node(self, node_id: str) -> MediaNode | None:
+        """Remove node and edges that reference it. Caller must ensure leaf (or force)."""
+        node = self.nodes.pop(node_id, None)
+        if node is None:
+            return None
+        self.edges = [e for e in self.edges if e.source_id != node_id and e.target_id != node_id]
+        return node

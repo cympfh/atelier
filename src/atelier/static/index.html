@@ -8,7 +8,7 @@
   <link rel="icon" href="/static/icons/atelier.svg" type="image/svg+xml" />
   <link rel="icon" href="/static/icons/favicon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="/static/app.css?v=6" />
+  <link rel="stylesheet" href="/static/app.css?v=8" />
 </head>
 <body>
   <div id="app">
@@ -87,10 +87,13 @@
         <div id="preview" class="preview-stage empty">Select or generate media</div>
         <div class="preview-meta" id="previewMeta"></div>
         <div class="preview-actions">
-          <a id="download" class="btn hidden" href="#" download>Download</a>
-          <button type="button" id="useAsInput" class="ghost hidden">Use as input</button>
-          <button type="button" id="restoreSetup" class="ghost hidden" title="Restore prompt and inputs used to generate this">
+          <a id="download" class="btn btn-download hidden" href="#" download>Download</a>
+          <button type="button" id="useAsInput" class="btn btn-input hidden">Use as input</button>
+          <button type="button" id="restoreSetup" class="btn btn-restore hidden" title="Restore prompt and inputs used to generate this">
             Restore setup
+          </button>
+          <button type="button" id="deleteMedia" class="btn btn-delete hidden" title="Delete leaf only (no child generations)">
+            Delete
           </button>
         </div>
       </section>
@@ -106,6 +109,6 @@
       </section>
     </main>
   </div>
-  <script src="/static/app.js?v=6"></script>
+  <script src="/static/app.js?v=8"></script>
 </body>
 </html>

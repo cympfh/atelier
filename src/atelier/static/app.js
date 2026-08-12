@@ -357,6 +357,11 @@
     }
   }
 
+  function isLeafNode(id) {
+    const edges = state.graph.edges || [];
+    return !edges.some((e) => e.source_id === id);
+  }
+
   function selectMedia(id) {
     state.selectedId = id;
     const node = state.media.find((m) => m.id === id);
@@ -365,6 +370,7 @@
     const dl = $("download");
     const use = $("useAsInput");
     const restore = $("restoreSetup");
+    const del = $("deleteMedia");
     if (!node) {
       stage.className = "preview-stage empty";
       stage.textContent = "Select or generate media";
@@ -372,6 +378,7 @@
       dl.classList.add("hidden");
       use.classList.add("hidden");
       restore.classList.add("hidden");
+      del.classList.add("hidden");
       return;
     }
     stage.className = "preview-stage";
@@ -419,6 +426,38 @@
       restore.classList.add("hidden");
       restore.onclick = null;
     }
+    // Delete: only leaves in the lineage tree
+    del.classList.remove("hidden");
+    const leaf = isLeafNode(id);
+    del.disabled = !leaf;
+    del.title = leaf
+      ? "Delete this media (leaf)"
+      : "Cannot delete: has child generations in the tree";
+    del.onclick = leaf
+      ? async () => {
+          if (!confirm("Delete this media? (leaf only)")) return;
+          showError(null);
+          try {
+            const res = await fetch(`/api/media/${id}`, { method: "DELETE" });
+            if (!res.ok) {
+              let body = null;
+              try {
+                body = await res.json();
+              } catch (_) {}
+              const err = new Error("delete failed");
+              err.detail = body?.detail ?? res.statusText;
+              throw err;
+            }
+            state.slots = state.slots.filter((s) => s !== id);
+            state.selectedId = null;
+            await refresh();
+            setStatus("deleted");
+          } catch (e) {
+            showError(e);
+            setStatus("error");
+          }
+        }
+      : null;
     renderGallery();
     renderTree();
   }
