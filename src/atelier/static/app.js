@@ -53,29 +53,60 @@
     return state.backends.find((b) => b.name === $("backend").value);
   }
 
+  const MAX_IMAGE_EDGE = 2048;
+
   function modeSupported(backend, mode) {
     const c = backend?.capabilities || {};
     return !!c[`supports_${mode}`];
   }
 
+  /** Resolve t2i/i2i/t2v/i2v from output kind + input slots. */
+  function resolvedMode() {
+    const out = $("outputKind").value; // image | video
+    const hasInput = state.slots.length > 0;
+    if (out === "video") return hasInput ? "i2v" : "t2v";
+    return hasInput ? "i2i" : "t2i";
+  }
+
   function refreshModeOptions() {
     const b = currentBackend();
-    const modeSel = $("mode");
-    for (const opt of modeSel.options) {
-      const ok = !b || modeSupported(b, opt.value);
+    const outSel = $("outputKind");
+    for (const opt of outSel.options) {
+      const kind = opt.value;
+      let ok = true;
+      if (b) {
+        if (kind === "image") {
+          ok = modeSupported(b, "t2i") || modeSupported(b, "i2i");
+        } else {
+          ok = modeSupported(b, "t2v") || modeSupported(b, "i2v");
+        }
+      }
       opt.disabled = !ok;
       opt.hidden = !ok;
     }
-    if (modeSel.selectedOptions[0]?.disabled) {
-      const first = [...modeSel.options].find((o) => !o.disabled);
-      if (first) modeSel.value = first.value;
+    if (outSel.selectedOptions[0]?.disabled) {
+      const first = [...outSel.options].find((o) => !o.disabled);
+      if (first) outSel.value = first.value;
     }
+    updateModeHint();
     renderParams();
+  }
+
+  function updateModeHint() {
+    const mode = resolvedMode();
+    const b = currentBackend();
+    const ok = !b || modeSupported(b, mode);
+    const src = state.slots.length ? "Image" : "Text";
+    const dst = $("outputKind").value === "video" ? "Video" : "Image";
+    $("modeHint").textContent = ok
+      ? `mode: ${mode} · ${src} → ${dst} (auto)`
+      : `mode: ${mode} · unsupported on ${b?.name || "?"}`;
+    $("modeHint").style.color = ok ? "" : "var(--danger)";
   }
 
   function renderParams() {
     const b = currentBackend();
-    const mode = $("mode").value;
+    const mode = resolvedMode();
     const schema = b?.param_schema || {};
     const box = $("params");
     box.innerHTML = "";
@@ -161,9 +192,86 @@
       row.querySelector(".rm").onclick = () => {
         state.slots.splice(i, 1);
         renderSlots();
+        updateModeHint();
+        renderParams();
       };
       list.appendChild(row);
     });
+    updateModeHint();
+  }
+
+  function resizeImageFile(file, maxEdge = MAX_IMAGE_EDGE) {
+    return new Promise((resolve, reject) => {
+      if (!file.type.startsWith("image/") || file.type === "image/gif") {
+        resolve(file);
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const w = img.naturalWidth || img.width;
+        const h = img.naturalHeight || img.height;
+        if (w <= maxEdge && h <= maxEdge) {
+          resolve(file);
+          return;
+        }
+        const scale = maxEdge / Math.max(w, h);
+        const cw = Math.max(1, Math.round(w * scale));
+        const ch = Math.max(1, Math.round(h * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = cw;
+        canvas.height = ch;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, cw, ch);
+        const outType = file.type === "image/png" ? "image/png" : "image/jpeg";
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error("resize failed"));
+              return;
+            }
+            const base = file.name.replace(/\.[^.]+$/, "") || "image";
+            const ext = outType === "image/png" ? ".png" : ".jpg";
+            resolve(new File([blob], base + ext, { type: outType }));
+          },
+          outType,
+          0.92
+        );
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
+      img.src = url;
+    });
+  }
+
+  async function uploadFiles(fileList) {
+    const files = [...fileList].filter(Boolean);
+    if (!files.length) return;
+    showError(null);
+    setStatus("uploading…");
+    try {
+      let lastId = null;
+      for (const raw of files) {
+        const file = await resizeImageFile(raw);
+        const fd = new FormData();
+        fd.append("file", file);
+        const node = await api("/api/media/upload", { method: "POST", body: fd });
+        lastId = node.id;
+        if (!state.slots.includes(node.id)) state.slots.push(node.id);
+      }
+      await refresh();
+      if (lastId) selectMedia(lastId);
+      renderSlots();
+      updateModeHint();
+      renderParams();
+      setStatus(files.length > 1 ? `uploaded ${files.length}` : "uploaded");
+    } catch (e) {
+      showError(e);
+      setStatus("error");
+    }
   }
 
   function selectMedia(id) {
@@ -203,6 +311,8 @@
     use.onclick = () => {
       if (!state.slots.includes(id)) state.slots.push(id);
       renderSlots();
+      updateModeHint();
+      renderParams();
     };
     renderGallery();
     renderTree();
@@ -223,6 +333,8 @@
       el.ondblclick = () => {
         if (!state.slots.includes(m.id)) state.slots.push(m.id);
         renderSlots();
+        updateModeHint();
+        renderParams();
       };
       g.appendChild(el);
     }
@@ -339,10 +451,15 @@
   }
 
   $("backend").onchange = refreshModeOptions;
-  $("mode").onchange = renderParams;
+  $("outputKind").onchange = () => {
+    updateModeHint();
+    renderParams();
+  };
   $("clearSlots").onclick = () => {
     state.slots = [];
     renderSlots();
+    updateModeHint();
+    renderParams();
   };
 
   $("prompt").addEventListener("keydown", (ev) => {
@@ -444,10 +561,15 @@
   $("generate").onclick = async () => {
     showError(null);
     const btn = $("generate");
+    const mode = resolvedMode();
+    const b = currentBackend();
+    if (b && !modeSupported(b, mode)) {
+      showError({ detail: `backend ${b.name} does not support ${mode}` });
+      return;
+    }
     btn.disabled = true;
     setStatus("generating…");
     try {
-      const mode = $("mode").value;
       const body = {
         mode,
         backend: $("backend").value,
@@ -456,7 +578,6 @@
         input_slots: [...state.slots],
         params: collectParams(),
         resolve_at_refs: true,
-        // video auto-async on server; force async for long image jobs if needed
         async_job: mode === "t2v" || mode === "i2v",
       };
       const res = await api("/api/generate", {
@@ -481,29 +602,44 @@
     }
   };
 
-  $("file").onchange = async (ev) => {
-    const file = ev.target.files?.[0];
-    if (!file) return;
-    showError(null);
-    setStatus("uploading…");
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const node = await api("/api/media/upload", { method: "POST", body: fd });
-      await refresh();
-      selectMedia(node.id);
-      if (!state.slots.includes(node.id)) {
-        state.slots.push(node.id);
-        renderSlots();
-      }
-      setStatus("uploaded");
-    } catch (e) {
-      showError(e);
-      setStatus("error");
-    } finally {
-      ev.target.value = "";
+  const dz = $("dropzone");
+  const fileInput = $("file");
+  dz.addEventListener("click", () => fileInput.click());
+  dz.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" || ev.key === " ") {
+      ev.preventDefault();
+      fileInput.click();
     }
+  });
+  fileInput.onchange = async (ev) => {
+    const files = ev.target.files;
+    if (files?.length) await uploadFiles(files);
+    ev.target.value = "";
   };
+  ["dragenter", "dragover"].forEach((evName) => {
+    dz.addEventListener(evName, (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      dz.classList.add("dragover");
+    });
+  });
+  ["dragleave", "drop"].forEach((evName) => {
+    dz.addEventListener(evName, (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (evName === "dragleave") dz.classList.remove("dragover");
+    });
+  });
+  dz.addEventListener("drop", async (ev) => {
+    dz.classList.remove("dragover");
+    const files = ev.dataTransfer?.files;
+    if (files?.length) await uploadFiles(files);
+  });
+
+  // Also accept D&D onto the whole compose panel window for convenience
+  window.addEventListener("dragover", (ev) => {
+    if (ev.dataTransfer?.types?.includes("Files")) ev.preventDefault();
+  });
 
   refresh().catch((e) => {
     showError(e);

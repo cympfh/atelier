@@ -68,7 +68,11 @@ uv run atelier start
 | PATCH | `/api/lineages/{id}` | リネーム |
 | POST | `/api/lineages/current/save` | 保存 / オートセーブ |
 
-UI: ヘッダーで lineage 選択・改名・新規。Prompt は **Ctrl+Enter** で Generate。10秒ごと自動保存。
+UI:
+- ヘッダーで lineage 選択・改名・新規。10秒ごと自動保存
+- Prompt は **Ctrl+Enter** で Generate
+- 入力は **D&D 領域**（大画像は長辺 2048 にリサイズ）
+- Output は **→ Image / → Video** のみ。Input slot の有無で t2i/i2i/t2v/i2v を自動選択
 
 ### `POST /api/generate`
 

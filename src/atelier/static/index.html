@@ -34,16 +34,15 @@
           <select id="backend"></select>
         </label>
         <label class="field">
-          <span>Mode</span>
-          <select id="mode">
-            <option value="t2i">Text → Image</option>
-            <option value="i2i">Image → Image</option>
-            <option value="t2v">Text → Video</option>
-            <option value="i2v">Image → Video</option>
+          <span>Output</span>
+          <select id="outputKind">
+            <option value="image">→ Image</option>
+            <option value="video">→ Video</option>
           </select>
+          <span id="modeHint" class="mode-hint">mode: t2i (auto)</span>
         </label>
         <label class="field grow">
-          <span>Prompt <em>@Image1 @Video1</em></span>
+          <span>Prompt <em>@Image1 @Video1 · Ctrl+Enter</em></span>
           <textarea id="prompt" rows="5" placeholder="Describe the result… use @Image1 to reference inputs"></textarea>
         </label>
         <div id="params" class="params"></div>
@@ -54,12 +53,21 @@
           </div>
           <div id="slotList" class="slot-list"></div>
         </div>
+        <div
+          id="dropzone"
+          class="dropzone"
+          tabindex="0"
+          role="button"
+          aria-label="Drop images or videos here"
+        >
+          <input type="file" id="file" accept="image/*,video/*" multiple hidden />
+          <div class="dropzone-inner">
+            <strong>ここに画像を D&amp;D</strong>
+            <span>クリックでも選択 · 大画像は自動リサイズ</span>
+          </div>
+        </div>
         <div class="actions">
           <button type="button" id="generate" class="primary">Generate</button>
-          <label class="upload btn">
-            Upload
-            <input type="file" id="file" accept="image/*,video/*" hidden />
-          </label>
         </div>
         <pre id="error" class="error hidden"></pre>
       </section>

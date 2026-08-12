@@ -230,6 +230,8 @@ README に記載。
 - 10秒おき `POST /api/lineages/current/save` で graph + meta を flush
 - 各 lineage は `data/lineages/{id}/{graph.json,files/,meta.json}` にノード・メディア・prompt 等を保持
 
-## [ ] Upload ボタンの代わりに「ここに画像をD&D」という領域を配置する
+## [x] 要望 [2026-08-12 18:52 完了]
 
-大きすぎる画像の場合はリサイズして使用する
+- Upload ボタンの代わりに D&D 領域「ここに画像を D&D」（クリック選択可）
+- 長辺 > 2048 の画像は canvas でリサイズしてから upload
+- Output は「→ Image / → Video」のみ。slot 有無で t2i/i2i/t2v/i2v を自動判定（mode hint 表示）
