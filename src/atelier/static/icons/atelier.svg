@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="atelier">
+  <defs>
+    <linearGradient id="bg" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1a1d26"/>
+      <stop offset="1" stop-color="#0c0d10"/>
+    </linearGradient>
+    <linearGradient id="warm" x1="18" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c47b4a"/>
+      <stop offset="1" stop-color="#e8a87c"/>
+    </linearGradient>
+  </defs>
+  <!-- rounded tile -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)"/>
+  <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="13.25" fill="none" stroke="#2a2f3a" stroke-width="1.5"/>
+  <!-- canvas frame -->
+  <rect x="14" y="12" width="36" height="28" rx="4" fill="none" stroke="url(#warm)" stroke-width="2.5"/>
+  <!-- image plane -->
+  <path d="M18 34 L28 24 L36 30 L42 22 L46 34 Z" fill="#e8a87c" opacity="0.9"/>
+  <!-- lineage branch below -->
+  <circle cx="32" cy="46" r="3.2" fill="#85cfc0"/>
+  <path d="M32 40 V42.8" stroke="#85cfc0" stroke-width="2" stroke-linecap="round"/>
+  <path d="M32 46 L22 54 M32 46 L42 54" stroke="#85cfc0" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="22" cy="54" r="2.4" fill="#7c9cff"/>
+  <circle cx="42" cy="54" r="2.4" fill="#c792ea"/>
+</svg>

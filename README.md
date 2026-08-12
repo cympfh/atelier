@@ -1,8 +1,14 @@
 # atelier
 
+<p align="left">
+  <img src="icons/atelier.svg" width="64" height="64" alt="atelier icon" />
+</p>
+
 画像/動画編集 webapp（Grok + Stable Diffusion WebUI）
 
 生成物を入力として再利用し、依存関係をツリー（lineage）で可視化する。
+
+アイコン: [`icons/atelier.svg`](icons/atelier.svg)（源）→ `favicon.ico` / PNG は `icons/` と `src/atelier/static/` に配置。
 
 ## 機能
 

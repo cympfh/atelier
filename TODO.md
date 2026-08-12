@@ -235,3 +235,7 @@ README に記載。
 - Upload ボタンの代わりに D&D 領域「ここに画像を D&D」（クリック選択可）
 - 長辺 > 2048 の画像は canvas でリサイズしてから upload
 - Output は「→ Image / → Video」のみ。slot 有無で t2i/i2i/t2v/i2v を自動判定（mode hint 表示）
+
+## [x] favicon 作成 [2026-08-12 18:55 完了]
+
+`icons/atelier.svg` 源。`favicon.ico` / 16·32 PNG / apple-touch を生成。`index.html` + `/favicon.ico` ルート、README に表示。

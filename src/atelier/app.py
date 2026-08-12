@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from atelier import __version__
@@ -57,13 +57,21 @@ def create_app(settings: Settings | None = None, *, include_echo: bool = False) 
     def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> FileResponse:
+        ico = STATIC_DIR / "favicon.ico"
+        if not ico.is_file():
+            ico = STATIC_DIR / "icons" / "favicon.ico"
+        return FileResponse(ico, media_type="image/x-icon")
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         index_path = STATIC_DIR / "index.html"
         if index_path.is_file():
             return index_path.read_text(encoding="utf-8")
         return (
-            "<!DOCTYPE html><html><head><title>atelier</title></head>" "<body><h1>atelier</h1><p>ok</p></body></html>"
+            "<!DOCTYPE html><html><head><title>atelier</title></head>"
+            "<body><h1>atelier</h1><p>ok</p></body></html>"
         )
 
     if STATIC_DIR.is_dir():
