@@ -87,6 +87,9 @@
         <div id="preview" class="preview-stage empty">Select or generate media</div>
         <div class="preview-meta" id="previewMeta"></div>
         <div class="preview-actions">
+          <button type="button" id="expandPreview" class="btn btn-expand hidden" title="Fullscreen preview (Esc to close)">
+            Expand
+          </button>
           <a id="download" class="btn btn-download hidden" href="#" download>Download</a>
           <button type="button" id="useAsInput" class="btn btn-input hidden">Use as input</button>
           <button type="button" id="restoreSetup" class="btn btn-restore hidden" title="Restore prompt and inputs used to generate this">
@@ -109,6 +112,13 @@
       </section>
     </main>
   </div>
-  <script src="/static/app.js?v=10"></script>
+
+  <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true" aria-label="Fullscreen preview" hidden>
+    <button type="button" id="lightboxClose" class="lightbox-close" aria-label="Close fullscreen">×</button>
+    <div id="lightboxStage" class="lightbox-stage"></div>
+    <div class="lightbox-hint">Esc / click outside to close</div>
+  </div>
+
+  <script src="/static/app.js?v=11"></script>
 </body>
 </html>

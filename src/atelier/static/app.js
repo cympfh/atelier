@@ -375,12 +375,45 @@
     return !edges.some((e) => e.source_id === id);
   }
 
+  function closeLightbox() {
+    const lb = $("lightbox");
+    if (!lb || lb.classList.contains("hidden")) return;
+    const stage = $("lightboxStage");
+    // Pause any video before tearing down
+    stage.querySelectorAll("video").forEach((v) => {
+      try {
+        v.pause();
+      } catch (_) {}
+    });
+    stage.innerHTML = "";
+    lb.classList.add("hidden");
+    lb.hidden = true;
+    document.body.classList.remove("lightbox-open");
+  }
+
+  function openLightbox(id) {
+    const node = state.media.find((m) => m.id === id);
+    if (!node) return;
+    const lb = $("lightbox");
+    const stage = $("lightboxStage");
+    stage.innerHTML =
+      node.kind === "video"
+        ? `<video src="${fileUrl(id)}" controls autoplay loop playsinline></video>`
+        : `<img src="${fileUrl(id)}" alt="" />`;
+    lb.classList.remove("hidden");
+    lb.hidden = false;
+    document.body.classList.add("lightbox-open");
+    // Focus close for keyboard users
+    $("lightboxClose")?.focus();
+  }
+
   function selectMedia(id) {
     state.selectedId = id;
     const node = state.media.find((m) => m.id === id);
     const stage = $("preview");
     const meta = $("previewMeta");
     const dl = $("download");
+    const expand = $("expandPreview");
     const use = $("useAsInput");
     const restore = $("restoreSetup");
     const del = $("deleteMedia");
@@ -389,9 +422,12 @@
       stage.textContent = "Select or generate media";
       meta.textContent = "";
       dl.classList.add("hidden");
+      expand.classList.add("hidden");
+      expand.onclick = null;
       use.classList.add("hidden");
       restore.classList.add("hidden");
       del.classList.add("hidden");
+      closeLightbox();
       return;
     }
     stage.className = "preview-stage";
@@ -399,6 +435,18 @@
       node.kind === "video"
         ? `<video src="${fileUrl(id)}" controls autoplay loop></video>`
         : `<img src="${fileUrl(id)}" alt="" />`;
+    // Click media to expand (video: only if not interacting with controls — use Expand btn too)
+    const mediaEl = stage.querySelector("img, video");
+    if (mediaEl) {
+      if (mediaEl.tagName === "IMG") {
+        mediaEl.onclick = () => openLightbox(id);
+        mediaEl.title = "Click to expand";
+      } else {
+        // Double-click video body opens fullscreen (single click is for controls)
+        mediaEl.ondblclick = () => openLightbox(id);
+        mediaEl.title = "Double-click to expand";
+      }
+    }
     meta.textContent = [
       `id=${node.id}`,
       `backend=${node.backend || "-"}`,
@@ -413,6 +461,8 @@
     dl.href = fileUrl(id);
     dl.download = node.original_name || node.filename || id;
     dl.classList.remove("hidden");
+    expand.classList.remove("hidden");
+    expand.onclick = () => openLightbox(id);
     if (canUseAsInput(node)) {
       use.classList.remove("hidden");
       use.onclick = () => {
@@ -624,6 +674,24 @@
     updateModeHint();
     renderParams();
   };
+
+  // Fullscreen preview: close via button, Esc, or backdrop click
+  $("lightboxClose").onclick = (ev) => {
+    ev.stopPropagation();
+    closeLightbox();
+  };
+  $("lightbox").onclick = (ev) => {
+    if (ev.target === $("lightbox") || ev.target === $("lightboxStage")) {
+      closeLightbox();
+    }
+  };
+  $("lightboxStage").onclick = (ev) => {
+    // Click image to close; leave video controls alone
+    if (ev.target.tagName === "IMG") closeLightbox();
+  };
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") closeLightbox();
+  });
 
   $("prompt").addEventListener("keydown", (ev) => {
     if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
