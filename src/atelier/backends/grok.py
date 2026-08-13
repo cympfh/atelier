@@ -7,6 +7,7 @@ from typing import Any
 from atelier.backends.base import Backend
 from atelier.backends.grok_client import (
     DEFAULT_IMAGE_MODEL,
+    DEFAULT_VIDEO_EDIT_MODEL,
     DEFAULT_VIDEO_MODEL,
     GrokClient,
     to_data_uri,
@@ -63,7 +64,7 @@ GROK_PARAM_SCHEMA: dict[str, Any] = {
         "maximum": 10,
         "default": 1,
         "description": "Number of outputs (video: sequential requests)",
-        "modes": ["t2i", "i2i", "t2v", "i2v"],
+        "modes": ["t2i", "i2i", "t2v", "i2v", "v2v"],
     },
     "image_model": {
         "type": "string",
@@ -73,7 +74,14 @@ GROK_PARAM_SCHEMA: dict[str, Any] = {
     "video_model": {
         "type": "string",
         "default": DEFAULT_VIDEO_MODEL,
+        "description": "T2V / i2v model (generations).",
         "modes": ["t2v", "i2v"],
+    },
+    "video_edit_model": {
+        "type": "string",
+        "default": DEFAULT_VIDEO_EDIT_MODEL,
+        "description": "v2v edit model (/videos/edits; not 1.5)",
+        "modes": ["v2v"],
     },
     "duration": {
         "type": "integer",
@@ -104,6 +112,7 @@ class GrokBackend(Backend):
             supports_i2i=True,
             supports_t2v=True,
             supports_i2v=True,
+            supports_v2v=True,
         )
 
     def availability(self) -> tuple[bool, str | None]:
@@ -143,6 +152,8 @@ class GrokBackend(Backend):
                 return await self._t2v(client, prompt, params)
             if mode == GenerateMode.i2v:
                 return await self._i2v(client, prompt, inputs, params)
+            if mode == GenerateMode.v2v:
+                return await self._v2v(client, prompt, inputs, params)
             raise GenerationError(f"unsupported mode: {mode}")
         finally:
             if self._client is None:
@@ -233,49 +244,20 @@ class GrokBackend(Backend):
         inputs: list[MediaInput],
         params: dict[str, Any],
     ) -> list[GeneratedAsset]:
-        """Image→video (animate) or video→video (edit) depending on input kind."""
+        """Image → video (animate still). Use v2v for video sources."""
         if not inputs:
-            raise GenerationError("i2v requires an image or video input")
-
-        video_in = next((i for i in inputs if i.mime.startswith("video/")), None)
+            raise GenerationError("i2v requires an image input")
         img = next((i for i in inputs if i.mime.startswith("image/")), None)
-        if video_in is None and img is None:
-            raise GenerationError("i2v requires an image/* or video/* input")
+        if img is None:
+            raise GenerationError("i2v requires an image/* input; use mode v2v for video edit")
 
         model = str(params.get("video_model") or params.get("model") or DEFAULT_VIDEO_MODEL)
         n = max(1, min(10, int(params.get("n") or 1)))
         duration = params.get("duration")
         aspect = params.get("aspect_ratio")
         resolution = params.get("resolution")
-
-        # Prefer explicit video edit when a video is among inputs
-        if video_in is not None:
-            uri = to_data_uri(video_in.data, video_in.mime)
-            out: list[GeneratedAsset] = []
-            for i in range(n):
-                data, mime = await client.generate_video(
-                    prompt,
-                    model=model,
-                    video_uri=uri,
-                )
-                out.append(
-                    GeneratedAsset(
-                        data=data,
-                        mime=mime,
-                        params={
-                            "model": model,
-                            "n": n,
-                            "index": i,
-                            "edit_video": True,
-                            "source_id": video_in.id,
-                        },
-                    )
-                )
-            return out
-
-        assert img is not None
         uri = to_data_uri(img.data, img.mime)
-        out = []
+        out: list[GeneratedAsset] = []
         for i in range(n):
             data, mime = await client.generate_video(
                 prompt,
@@ -300,4 +282,56 @@ class GrokBackend(Backend):
                     },
                 )
             )
+        return out
+
+    async def _v2v(
+        self,
+        client: GrokClient,
+        prompt: str,
+        inputs: list[MediaInput],
+        params: dict[str, Any],
+    ) -> list[GeneratedAsset]:
+        """Video → video edit via POST /videos/edits."""
+        if not inputs:
+            raise GenerationError("v2v requires a video input")
+        video_in = next((i for i in inputs if i.mime.startswith("video/")), None)
+        if video_in is None:
+            raise GenerationError("v2v requires a video/* input")
+
+        edit_model = str(params.get("video_edit_model") or params.get("edit_model") or DEFAULT_VIDEO_EDIT_MODEL)
+        if "1.5" in edit_model:
+            edit_model = DEFAULT_VIDEO_EDIT_MODEL
+        n = max(1, min(10, int(params.get("n") or 1)))
+        # Files API + file_id: data: URIs lack a .mp4 path suffix required by edits URL rules
+        # and often yield a near-copy with prompt ignored.
+        file_id = await client.upload_file(
+            video_in.data,
+            "source.mp4",
+            mime=video_in.mime if video_in.mime.startswith("video/") else "video/mp4",
+            expires_after=86400,
+        )
+        out: list[GeneratedAsset] = []
+        try:
+            for i in range(n):
+                data, mime = await client.generate_video(
+                    prompt,
+                    model=edit_model,
+                    video_file_id=file_id,
+                )
+                out.append(
+                    GeneratedAsset(
+                        data=data,
+                        mime=mime,
+                        params={
+                            "model": edit_model,
+                            "n": n,
+                            "index": i,
+                            "edit_video": True,
+                            "source_id": video_in.id,
+                            "source_file_id": file_id,
+                        },
+                    )
+                )
+        finally:
+            await client.delete_file(file_id)
         return out

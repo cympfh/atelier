@@ -65,12 +65,19 @@
     return el ? el.value : "image";
   }
 
-  /** Videos are only valid sources for → Video (Grok video edit / i2v). */
+  /** Videos are only valid sources for → Video (mode v2v). */
   function canUseAsInput(node) {
     if (!node) return false;
     if (node.kind === "image") return true;
     if (node.kind === "video") return outputKind() === "video";
     return false;
+  }
+
+  function slotsHaveVideo() {
+    return state.slots.some((id) => {
+      const n = state.media.find((m) => m.id === id);
+      return n && n.kind === "video";
+    });
   }
 
   function addToSlots(id) {
@@ -99,11 +106,14 @@
     }
   }
 
-  /** Resolve t2i/i2i/t2v/i2v from output kind + input slots. */
+  /** Resolve t2i/i2i/t2v/i2v/v2v from output kind + input slots. */
   function resolvedMode() {
     const out = outputKind(); // image | video
     const hasInput = state.slots.length > 0;
-    if (out === "video") return hasInput ? "i2v" : "t2v";
+    if (out === "video") {
+      if (!hasInput) return "t2v";
+      return slotsHaveVideo() ? "v2v" : "i2v";
+    }
     return hasInput ? "i2i" : "t2i";
   }
 
@@ -117,7 +127,10 @@
         if (kind === "image") {
           ok = modeSupported(b, "t2i") || modeSupported(b, "i2i");
         } else {
-          ok = modeSupported(b, "t2v") || modeSupported(b, "i2v");
+          ok =
+            modeSupported(b, "t2v") ||
+            modeSupported(b, "i2v") ||
+            modeSupported(b, "v2v");
         }
       }
       radio.disabled = !ok;
@@ -219,7 +232,7 @@
     }
     // Output kind from media kind or stored mode
     const mode = node.params?.mode;
-    if (mode === "t2v" || mode === "i2v" || node.kind === "video") {
+    if (mode === "t2v" || mode === "i2v" || mode === "v2v" || node.kind === "video") {
       setOutputKind("video");
     } else {
       setOutputKind("image");
@@ -728,7 +741,7 @@
         input_slots: [...state.slots],
         params: collectParams(),
         resolve_at_refs: true,
-        async_job: mode === "t2v" || mode === "i2v",
+        async_job: mode === "t2v" || mode === "i2v" || mode === "v2v",
       };
       const res = await api("/api/generate", {
         method: "POST",

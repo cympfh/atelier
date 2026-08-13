@@ -29,11 +29,15 @@ class MockTransport(httpx.AsyncBaseTransport):
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         body = None
-        if request.content:
+        try:
+            raw = await request.aread()
+        except Exception:
+            raw = b""
+        if raw:
             try:
-                body = json.loads(request.content.decode())
+                body = json.loads(raw.decode())
             except Exception:
-                body = request.content
+                body = raw
         self.calls.append((request.method, str(request.url), body))
         path = request.url.path
 
@@ -43,12 +47,19 @@ class MockTransport(httpx.AsyncBaseTransport):
         if path.endswith("/images/edits"):
             b64 = base64.b64encode(_TINY_PNG).decode()
             return httpx.Response(200, json={"data": [{"b64_json": b64}]})
-        if path.endswith("/videos/generations"):
+        if path.rstrip("/").endswith("/files") and request.method == "POST":
+            return httpx.Response(200, json={"id": "file_test123", "filename": "source.mp4"})
+        if "/files/" in path and request.method == "DELETE":
+            return httpx.Response(200, json={"id": "file_test123", "deleted": True})
+        if path.endswith("/videos/generations") or path.endswith("/videos/edits"):
             return httpx.Response(200, json={"request_id": "vid123"})
         if "/videos/vid123" in path:
             return httpx.Response(
                 200,
-                json={"status": "done", "video": {"url": "https://cdn.example/v.mp4"}},
+                json={
+                    "status": "done",
+                    "video": {"url": "https://cdn.example/v.mp4", "respect_moderation": True},
+                },
             )
         if path.endswith("/v.mp4") or "cdn.example" in str(request.url):
             return httpx.Response(200, content=b"fake-mp4", headers={"content-type": "video/mp4"})
@@ -127,14 +138,19 @@ def test_grok_video_edit_from_video_input() -> None:
     client = GrokClient("key", client=httpx.AsyncClient(transport=transport), video_timeout=30)
     backend = GrokBackend(Settings(XAI_API_KEY="key"), client=client)
     vid = MediaInput(id="v1", kind=MediaKind.video, mime="video/mp4", data=b"fake-mp4-src")
-    assets = asyncio.run(backend.generate(GenerateMode.i2v, "add a hat", [vid], {"n": 1}))
+    assets = asyncio.run(backend.generate(GenerateMode.v2v, "add a hat", [vid], {"n": 1}))
     assert len(assets) == 1
-    gens = [c for c in transport.calls if c[0] == "POST" and "/videos/generations" in c[1]]
+    # Upload source via Files API then edit with file_id
+    uploads = [c for c in transport.calls if c[0] == "POST" and c[1].rstrip("/").endswith("/files")]
+    assert len(uploads) >= 1
+    gens = [c for c in transport.calls if c[0] == "POST" and "/videos/edits" in c[1]]
     assert len(gens) == 1
+    assert not any("/videos/generations" in c[1] and c[0] == "POST" for c in transport.calls)
     body = gens[0][2]
-    assert "video" in body
-    assert body["video"]["url"].startswith("data:video/mp4;base64,")
+    assert body["video"] == {"file_id": "file_test123"}
+    assert body.get("model") == "grok-imagine-video"
     assert assets[0].params.get("edit_video") is True
+    assert assets[0].params.get("model") == "grok-imagine-video"
 
 
 def test_grok_video_n_serial() -> None:

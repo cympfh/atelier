@@ -15,7 +15,10 @@ log = logging.getLogger(__name__)
 
 DEFAULT_BASE = "https://api.x.ai/v1"
 DEFAULT_IMAGE_MODEL = "grok-imagine-image-quality"
+# T2V / image→video (generations)
 DEFAULT_VIDEO_MODEL = "grok-imagine-video-1.5"
+# Video edit / extension — docs use grok-imagine-video; 1.5 rejects edits (400)
+DEFAULT_VIDEO_EDIT_MODEL = "grok-imagine-video"
 
 
 def _auth_headers(api_key: str) -> dict[str, str]:
@@ -99,6 +102,56 @@ class GrokClient:
             raise GenerationError(f"failed to download asset: {e}") from e
         ctype = resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
         return resp.content, ctype
+
+    async def upload_file(
+        self,
+        data: bytes,
+        filename: str,
+        *,
+        mime: str = "application/octet-stream",
+        purpose: str = "assistants",
+        expires_after: int | None = 86400,
+    ) -> str:
+        """Upload bytes to xAI Files API; return file_id.
+
+        Video edit docs require a proper .mp4 filename/codec for URL inputs;
+        file_id upload with filename ending in .mp4 is the reliable path for v2v.
+        """
+        client = await self._get_client()
+        name = filename if filename.lower().endswith(".mp4") or not mime.startswith("video/") else f"{filename}.mp4"
+        # Multipart: expires_after / purpose MUST appear before file (xAI requirement).
+        # httpx sends `data` fields before `files`.
+        form: dict[str, str] = {"purpose": purpose}
+        if expires_after is not None:
+            form["expires_after"] = str(expires_after)
+        try:
+            resp = await client.post(
+                f"{self.base_url}/files",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                data=form,
+                files={"file": (name, data, mime)},
+                timeout=max(self.http_timeout, self.video_timeout),
+            )
+        except httpx.HTTPError as e:
+            raise GenerationError(f"xAI file upload failed: {e}") from e
+        if resp.status_code >= 400:
+            raise GenerationError(f"xAI file upload HTTP {resp.status_code}: {resp.text[:500]}")
+        payload = resp.json()
+        file_id = payload.get("id")
+        if not file_id:
+            raise GenerationError(f"xAI file upload missing id: {payload}")
+        return str(file_id)
+
+    async def delete_file(self, file_id: str) -> None:
+        client = await self._get_client()
+        try:
+            await client.delete(
+                f"{self.base_url}/files/{file_id}",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                timeout=self.http_timeout,
+            )
+        except httpx.HTTPError:
+            log.warning("failed to delete xAI file %s", file_id)
 
     async def generate_images(
         self,
@@ -185,20 +238,27 @@ class GrokClient:
         model: str = DEFAULT_VIDEO_MODEL,
         image_uri: str | None = None,
         video_uri: str | None = None,
+        video_file_id: str | None = None,
         duration: int | None = None,
         aspect_ratio: str | None = None,
         resolution: str | None = None,
         poll_interval: float = 3.0,
     ) -> tuple[bytes, str]:
-        """Text/image-to-video, or video edit when video_uri is set.
+        """Text/image-to-video, or video edit when video_file_id / video_uri is set.
 
-        Video edit: output inherits duration/aspect from source; duration/aspect/resolution
-        params are ignored by the API for edit mode.
+        Video edit: use POST /videos/edits. Prefer video_file_id (Files API + .mp4 name);
+        bare data: URIs often fail the API's ".mp4 extension" rule and yield no real edit.
         """
         body: dict[str, Any] = {"model": model, "prompt": prompt}
-        if video_uri:
-            # Video editing (source video + prompt)
-            body["video"] = {"url": video_uri}
+        # Official endpoints (docs.x.ai):
+        # - text/image → video: POST /v1/videos/generations  (+ optional image)
+        # - video edit:         POST /v1/videos/edits        (+ required video)
+        if video_file_id or video_uri:
+            if video_file_id:
+                body["video"] = {"file_id": video_file_id}
+            else:
+                body["video"] = {"url": video_uri}
+            path = "/videos/edits"
         elif image_uri:
             body["image"] = {"url": image_uri}
             if duration is not None:
@@ -207,18 +267,19 @@ class GrokClient:
                 body["aspect_ratio"] = aspect_ratio
             if resolution:
                 body["resolution"] = resolution
+            path = "/videos/generations"
         else:
-            # Text-to-video
             if duration is not None:
                 body["duration"] = duration
             if aspect_ratio:
                 body["aspect_ratio"] = aspect_ratio
             if resolution:
                 body["resolution"] = resolution
+            path = "/videos/generations"
 
         data = await self._request(
             "POST",
-            "/videos/generations",
+            path,
             json=body,
             timeout=self.http_timeout,
         )
@@ -247,12 +308,15 @@ class GrokClient:
             status = (data.get("status") or "").lower()
             if status in ("done", "completed", "succeeded", "success"):
                 video = data.get("video") or {}
+                if isinstance(video, dict) and video.get("respect_moderation") is False:
+                    raise GenerationError("video rejected by moderation (empty url)")
                 url = (video.get("url") if isinstance(video, dict) else None) or data.get("url")
                 if not url:
-                    raise GenerationError("video done but no url")
+                    raise GenerationError(f"video done but no url: {data}")
                 return await self._download_video(url)
             if status in ("failed", "expired", "error", "cancelled"):
-                raise GenerationError(f"video generation {status}: {data}")
+                err = data.get("error") or data
+                raise GenerationError(f"video generation {status}: {err}")
 
             await asyncio.sleep(poll_interval)
 

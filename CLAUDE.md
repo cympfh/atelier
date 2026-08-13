@@ -52,7 +52,7 @@ uv run atelier start
 | Image | あり | i2i |
 | Video | 空 | t2v |
 | Video | 画像 | i2v（animate） |
-| Video | 動画 | i2v → Grok **video edit** |
+| Video | 動画 | **v2v**（Grok video edit） |
 
 - **→ Image** では動画を slot に入れない（Use as input 非表示・switch 時 prune）
 - **→ Video** では画像・動画どちらも入力可
@@ -154,11 +154,13 @@ uv run pytest
 1. **I2I の `image` は文字列**（URL / data URI）。`{"url","type"}` map は 422  
    - 複数枚: `image: ["data:...", "data:..."]`（最大 3）
 2. **動画入力は Image-to-Video ではなく Video Edit**  
-   - body に `video: {url: data URI}`。duration/aspect は API 側で source 継承
-3. **動画生成は async** — `POST /videos/generations` → `request_id` poll  
+   - **エンドポイントは `POST /v1/videos/edits`**（`/videos/generations` ではない）  
+   - body: `video: {url: data URI or public URL}`。duration/aspect は source 継承  
+   - `/generations` に `video` を載せても無視され、prompt だけの T2V になる（エラーにならない）
+3. **動画生成は async** — generations/edits とも `request_id` → `GET /v1/videos/{id}` poll  
    - アプリ側 JobQueue も video mode で自動 async
 4. **動画の `n`** は API 一括ではなく **直列リクエスト**（`grok.py`）
-5. models: `grok-imagine-image-quality`, `grok-imagine-video-1.5`（適宜更新）
+5. models: `grok-imagine-image-quality`, `grok-imagine-video-1.5`（edit の docs 例は `grok-imagine-video` のことも）
 
 ### グラフ・削除
 

@@ -178,7 +178,11 @@ async def generate(body: GenerateBody, request: Request) -> GenerateResponse:
         raise _http_error(e) from e
 
     # Auto-async for video modes; body.async_job forces async for any mode.
-    use_async = body.async_job or body.mode in (GenerateMode.t2v, GenerateMode.i2v)
+    use_async = body.async_job or body.mode in (
+        GenerateMode.t2v,
+        GenerateMode.i2v,
+        GenerateMode.v2v,
+    )
 
     if use_async:
         job = await queue.submit(req)

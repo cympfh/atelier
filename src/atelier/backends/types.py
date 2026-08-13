@@ -15,6 +15,7 @@ class GenerateMode(str, Enum):
     i2i = "i2i"
     t2v = "t2v"
     i2v = "i2v"
+    v2v = "v2v"  # video edit (source video + prompt)
 
 
 class MediaInput(BaseModel):
@@ -50,6 +51,7 @@ class BackendCapabilities(BaseModel):
     supports_i2i: bool = False
     supports_t2v: bool = False
     supports_i2v: bool = False
+    supports_v2v: bool = False
 
     def supports(self, mode: GenerateMode) -> bool:
         return {
@@ -57,6 +59,7 @@ class BackendCapabilities(BaseModel):
             GenerateMode.i2i: self.supports_i2i,
             GenerateMode.t2v: self.supports_t2v,
             GenerateMode.i2v: self.supports_i2v,
+            GenerateMode.v2v: self.supports_v2v,
         }[mode]
 
 

@@ -17,8 +17,8 @@ from atelier.graph.models import MediaKind, MediaNode
 from atelier.graph.store import GraphStore
 from atelier.media.store import MediaStore
 
-_MODES_NEED_MEDIA_INPUT = frozenset({GenerateMode.i2i, GenerateMode.i2v})
-_MODES_OUTPUT_VIDEO = frozenset({GenerateMode.t2v, GenerateMode.i2v})
+_MODES_NEED_MEDIA_INPUT = frozenset({GenerateMode.i2i, GenerateMode.i2v, GenerateMode.v2v})
+_MODES_OUTPUT_VIDEO = frozenset({GenerateMode.t2v, GenerateMode.i2v, GenerateMode.v2v})
 
 
 def _validate_request(request: GenerateRequest, inputs: list[MediaInput]) -> None:
@@ -33,10 +33,16 @@ def _validate_request(request: GenerateRequest, inputs: list[MediaInput]) -> Non
             if inp.kind != MediaKind.image:
                 raise InvalidRequestError(f"mode i2i expects image inputs only; got {inp.kind.value} ({inp.id})")
     elif request.mode == GenerateMode.i2v:
-        # Image→video (animate) or video→video (edit). No pure text.
-        ok = any(inp.kind in (MediaKind.image, MediaKind.video) for inp in inputs)
-        if not ok:
-            raise InvalidRequestError("mode i2v expects image or video inputs")
+        for inp in inputs:
+            if inp.kind != MediaKind.image:
+                raise InvalidRequestError(
+                    f"mode i2v expects image inputs only; got {inp.kind.value} ({inp.id}). Use v2v for video sources."
+                )
+    elif request.mode == GenerateMode.v2v:
+        if not request.prompt.strip():
+            raise InvalidRequestError("mode v2v requires a non-empty prompt")
+        if not any(inp.kind == MediaKind.video for inp in inputs):
+            raise InvalidRequestError("mode v2v requires at least one video input")
 
 
 async def run_generate(
