@@ -851,34 +851,51 @@
     $("lineageName").value = state.currentLineage?.name || "";
   }
 
-  async function refresh() {
-    const [media, graph, backends, lineages, current] = await Promise.all([
-      api("/api/media"),
-      api("/api/graph"),
-      api("/api/backends"),
-      api("/api/lineages"),
-      api("/api/lineages/current"),
-    ]);
-    state.media = media;
-    state.graph = graph;
-    state.backends = backends;
-    state.lineages = lineages;
-    state.currentLineage = current;
+  function applyBackends(backends) {
+    state.backends = backends || [];
     const sel = $("backend");
     const prev = sel.value;
     sel.innerHTML = "";
-    for (const b of backends) {
+    for (const b of state.backends) {
       const o = document.createElement("option");
       o.value = b.name;
       o.textContent = `${b.name}${b.available ? "" : " (unavailable)"}`;
       sel.appendChild(o);
     }
-    if (prev && backends.some((b) => b.name === prev)) sel.value = prev;
+    if (prev && state.backends.some((b) => b.name === prev)) sel.value = prev;
     else {
-      const prefer = backends.find((b) => b.available) || backends[0];
+      const prefer = state.backends.find((b) => b.available) || state.backends[0];
       if (prefer) sel.value = prefer.name;
     }
     refreshModeOptions();
+  }
+
+  async function refreshBackends() {
+    const backends = await api("/api/backends");
+    applyBackends(backends);
+    return backends;
+  }
+
+  async function refresh() {
+    // Critical path: media/graph/lineages only. SD availability probe can be slow
+    // when WebUI is down — load backends in parallel without blocking first paint.
+    const backendsP = refreshBackends().catch((e) => {
+      console.warn("backends load failed", e);
+      if (!state.backends.length) {
+        applyBackends([]);
+      }
+      return null;
+    });
+    const [media, graph, lineages, current] = await Promise.all([
+      api("/api/media"),
+      api("/api/graph"),
+      api("/api/lineages"),
+      api("/api/lineages/current"),
+    ]);
+    state.media = media;
+    state.graph = graph;
+    state.lineages = lineages;
+    state.currentLineage = current;
     renderLineages();
     renderGallery();
     renderTree();
@@ -889,6 +906,7 @@
       state.selectedId = null;
       selectMedia(null);
     }
+    await backendsP;
   }
 
   $("backend").onchange = refreshModeOptions;

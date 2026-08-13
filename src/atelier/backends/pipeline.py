@@ -56,7 +56,7 @@ async def run_generate(
     """Execute a generation job and return newly created MediaNodes."""
     backend = registry.get(request.backend)
 
-    available, reason = backend.availability()
+    available, reason = backend.availability(force=True)
     if not available:
         raise BackendUnavailableError(backend.name, reason)
 

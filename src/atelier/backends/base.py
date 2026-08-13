@@ -24,8 +24,8 @@ class Backend(ABC):
         """Modes this backend implements."""
 
     @abstractmethod
-    def availability(self) -> tuple[bool, str | None]:
-        """(available, reason_if_not)."""
+    def availability(self, *, force: bool = False) -> tuple[bool, str | None]:
+        """(available, reason_if_not). ``force`` re-probes even if cached."""
 
     def info(self) -> BackendInfo:
         available, reason = self.availability()

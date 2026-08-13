@@ -34,7 +34,7 @@ class EchoBackend(Backend):
             supports_i2v=False,
         )
 
-    def availability(self) -> tuple[bool, str | None]:
+    def availability(self, *, force: bool = False) -> tuple[bool, str | None]:
         return True, None
 
     def param_schema(self) -> dict[str, Any]:

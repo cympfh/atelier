@@ -6,6 +6,8 @@ import base64
 import json
 import logging
 import re
+import threading
+import time
 from typing import Any
 
 import httpx
@@ -23,6 +25,11 @@ from atelier.config import Settings
 log = logging.getLogger(__name__)
 
 DEFAULT_CHECKPOINT_HINT = "WAI-NSFW-illustrious-SDXL"
+
+# Availability probe: fail fast when WebUI is down; cache so /api/backends stays snappy.
+_PROBE_TIMEOUT = httpx.Timeout(3.0, connect=1.5)
+_CACHE_TTL_OK = 60.0  # seconds while available
+_CACHE_TTL_FAIL = 15.0  # re-check sooner when unavailable
 
 # name:weight or name (weight defaults to 1.0), comma-separated
 _LORA_ENTRY = re.compile(
@@ -190,6 +197,9 @@ class SDWebUIBackend(Backend):
         self._owns_client = client is None
         self._probe = probe_on_availability
         self._available_cache: tuple[bool, str | None] | None = None
+        self._cache_at: float = 0.0
+        self._probe_lock = threading.Lock()
+        self._probing = False
 
     def capabilities(self) -> BackendCapabilities:
         return BackendCapabilities(
@@ -202,20 +212,64 @@ class SDWebUIBackend(Backend):
     def param_schema(self) -> dict[str, Any]:
         return SD_PARAM_SCHEMA
 
-    def availability(self) -> tuple[bool, str | None]:
+    def availability(self, *, force: bool = False) -> tuple[bool, str | None]:
+        """Return (available, reason).
+
+        Uses a short-timeout probe with TTL cache and stale-while-revalidate so
+        repeated ``GET /api/backends`` (page load / refresh) does not block for
+        many seconds when SD WebUI is down or slow.
+        """
         if not self._settings.sd_webui_url:
             return False, "SD_WEBUI_URL is not set"
         if not self._probe:
             return True, None
+
+        now = time.monotonic()
+        cached = self._available_cache
+        if not force and cached is not None:
+            ok, _reason = cached
+            ttl = _CACHE_TTL_OK if ok else _CACHE_TTL_FAIL
+            age = now - self._cache_at
+            if age < ttl:
+                return cached
+            # Stale: serve last known result and refresh in background
+            self._schedule_probe()
+            return cached
+
+        return self._probe_now()
+
+    def _probe_now(self) -> tuple[bool, str | None]:
+        result = self._do_probe()
+        self._available_cache = result
+        self._cache_at = time.monotonic()
+        return result
+
+    def _do_probe(self) -> tuple[bool, str | None]:
         try:
-            # WSL↔Windows bridge can add latency; keep probe generous
-            with httpx.Client(timeout=httpx.Timeout(15.0, connect=5.0)) as c:
+            with httpx.Client(timeout=_PROBE_TIMEOUT) as c:
                 r = c.get(f"{self._settings.sd_webui_url.rstrip('/')}/sdapi/v1/sd-models")
                 if r.status_code >= 400:
                     return False, f"SD WebUI HTTP {r.status_code}: {r.text[:200]}"
             return True, None
         except Exception as e:
             return False, f"SD WebUI unreachable: {e}"
+
+    def _schedule_probe(self) -> None:
+        with self._probe_lock:
+            if self._probing:
+                return
+            self._probing = True
+
+        def run() -> None:
+            try:
+                self._probe_now()
+            except Exception:
+                log.exception("background SD WebUI availability probe failed")
+            finally:
+                with self._probe_lock:
+                    self._probing = False
+
+        threading.Thread(target=run, name="sd-avail-probe", daemon=True).start()
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:

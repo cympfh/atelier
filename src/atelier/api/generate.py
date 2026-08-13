@@ -165,7 +165,7 @@ async def generate(body: GenerateBody, request: Request) -> GenerateResponse:
     # Fail fast before enqueueing (same checks as pipeline)
     try:
         backend = registry.get(req.backend)
-        available, reason = backend.availability()
+        available, reason = backend.availability(force=True)
         if not available:
             from atelier.backends.types import BackendUnavailableError
 

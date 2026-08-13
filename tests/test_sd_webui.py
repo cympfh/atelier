@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import threading
+import time
 from typing import Any
 
 import httpx
+import pytest
 
 from atelier.backends.sd_webui import SDWebUIBackend, apply_loras_to_prompt, parse_lora_tags
 from atelier.backends.types import GenerateMode, MediaInput
@@ -48,6 +51,54 @@ class SDTransport(httpx.AsyncBaseTransport):
 def test_parse_lora_tags() -> None:
     assert parse_lora_tags("foo:0.8, bar") == ["<lora:foo:0.8>", "<lora:bar:1.0>"]
     assert apply_loras_to_prompt("1girl", "style:0.7") == "1girl <lora:style:0.7>"
+
+
+def test_sd_availability_cache_and_force(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Probe runs once; cache hits skip network; force= re-probes."""
+    backend = SDWebUIBackend(
+        Settings(SD_WEBUI_URL="http://sd.test"),
+        probe_on_availability=True,
+    )
+    calls = {"n": 0}
+
+    def fake_probe() -> tuple[bool, str | None]:
+        calls["n"] += 1
+        return True, None
+
+    monkeypatch.setattr(backend, "_do_probe", fake_probe)
+    assert backend.availability() == (True, None)
+    assert backend.availability() == (True, None)
+    assert calls["n"] == 1
+    assert backend.availability(force=True) == (True, None)
+    assert calls["n"] == 2
+
+
+def test_sd_availability_stale_while_revalidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = SDWebUIBackend(
+        Settings(SD_WEBUI_URL="http://sd.test"),
+        probe_on_availability=True,
+    )
+    results = iter([(True, None), (False, "down")])
+    done = threading.Event()
+    calls = {"n": 0}
+
+    def fake_probe() -> tuple[bool, str | None]:
+        calls["n"] += 1
+        out = next(results)
+        if calls["n"] >= 2:
+            done.set()
+        return out
+
+    monkeypatch.setattr(backend, "_do_probe", fake_probe)
+    # First call populates cache
+    assert backend.availability() == (True, None)
+    # Expire cache
+    backend._cache_at = time.monotonic() - 999.0
+    # Stale hit returns old value immediately, schedules background probe
+    assert backend.availability() == (True, None)
+    assert done.wait(timeout=2.0)
+    # After background probe finishes, next call sees new cache
+    assert backend.availability() == (False, "down")
 
 
 def test_sd_txt2img() -> None:

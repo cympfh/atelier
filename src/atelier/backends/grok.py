@@ -115,7 +115,7 @@ class GrokBackend(Backend):
             supports_v2v=True,
         )
 
-    def availability(self) -> tuple[bool, str | None]:
+    def availability(self, *, force: bool = False) -> tuple[bool, str | None]:
         if not self._settings.xai_api_key and self._client is None:
             return False, "XAI_API_KEY is not set"
         return True, None

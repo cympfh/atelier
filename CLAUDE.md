@@ -176,7 +176,7 @@ uv run pytest
 
 ### SD WebUI
 
-11. 未起動時は `available: false`。Grok は独立して動く
+11. 未起動時は `available: false`。probe は短タイムアウト + TTL キャッシュ（stale-while-revalidate）。UI は backends を media/graph と分離して読み込み。Grok は独立
 12. LoRA は `lora: "name:0.8,other:0.5"` → prompt 末尾に `<lora:...>` を付与
 
 ### エラー形式
