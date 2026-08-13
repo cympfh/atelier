@@ -757,6 +757,12 @@
     renderTree();
   }
 
+  /** Video-only badge for gallery / lineage thumbs (top-right). */
+  function videoKindIcon(kind) {
+    if (kind !== "video") return "";
+    return `<span class="thumb-video-icon" title="Video" aria-label="Video"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M8 6.8v10.4c0 .9 1 1.4 1.7.9l7.2-5.2c.6-.4.6-1.3 0-1.8L9.7 5.9C9 5.4 8 5.9 8 6.8z"/></svg></span>`;
+  }
+
   function renderGallery() {
     const g = $("gallery");
     g.innerHTML = "";
@@ -767,6 +773,7 @@
         (m.kind === "video"
           ? `<video src="${fileUrl(m.id)}" muted></video>`
           : `<img src="${fileUrl(m.id)}" alt="" />`) +
+        videoKindIcon(m.kind) +
         `<span class="badge ${backendColor(m.backend)}">${m.backend || m.kind}</span>`;
       el.onclick = () => selectMedia(m.id);
       el.ondblclick = () => {
@@ -781,6 +788,156 @@
     }
   }
 
+  /**
+   * Layered DAG layout (left → right).
+   * Each node once; multi-parent edges all drawn. Generations grow on X so the
+   * bottom strip stays short; siblings stack on Y.
+   */
+  function layoutDag(nodesMap, edges) {
+    // Match gallery .thumb: minmax(96px) square; card adds one prompt line below
+    const NODE_W = 96;
+    const NODE_H = 114; // 96 thumb + ~18 prompt strip
+    const H_GAP = 32; // room for horizontal edges between ranks
+    const V_GAP = 12;
+    const PAD = 10;
+
+    const ids = Object.keys(nodesMap);
+    if (!ids.length) return { positions: {}, edges: [], width: 0, height: 0, nodeW: NODE_W, nodeH: NODE_H };
+
+    const children = new Map(); // source -> [target]
+    const parents = new Map(); // target -> [source]
+    const edgeList = [];
+    for (const e of edges) {
+      if (!nodesMap[e.source_id] || !nodesMap[e.target_id]) continue;
+      edgeList.push(e);
+      if (!children.has(e.source_id)) children.set(e.source_id, []);
+      children.get(e.source_id).push(e.target_id);
+      if (!parents.has(e.target_id)) parents.set(e.target_id, []);
+      parents.get(e.target_id).push(e.source_id);
+    }
+    // Also honor parent_ids if edge missing
+    for (const n of Object.values(nodesMap)) {
+      for (const pid of n.parent_ids || []) {
+        if (!nodesMap[pid]) continue;
+        const plist = parents.get(n.id) || [];
+        if (!plist.includes(pid)) {
+          plist.push(pid);
+          parents.set(n.id, plist);
+          if (!children.has(pid)) children.set(pid, []);
+          if (!children.get(pid).includes(n.id)) children.get(pid).push(n.id);
+          edgeList.push({ source_id: pid, target_id: n.id, role: null });
+        }
+      }
+    }
+
+    // Rank = longest path from any root (multi-parent → max parent rank + 1)
+    const rank = new Map();
+    const visiting = new Set();
+    function computeRank(id) {
+      if (rank.has(id)) return rank.get(id);
+      if (visiting.has(id)) return 0; // cycle guard
+      visiting.add(id);
+      const ps = parents.get(id) || [];
+      let r = 0;
+      if (ps.length) {
+        r = Math.max(...ps.map((p) => computeRank(p))) + 1;
+      }
+      visiting.delete(id);
+      rank.set(id, r);
+      return r;
+    }
+    for (const id of ids) computeRank(id);
+
+    // Layers: rank -> ids (newest first within layer for stability)
+    const byRank = new Map();
+    for (const id of ids) {
+      const r = rank.get(id) || 0;
+      if (!byRank.has(r)) byRank.set(r, []);
+      byRank.get(r).push(id);
+    }
+    const maxRank = Math.max(0, ...byRank.keys());
+    for (let r = 0; r <= maxRank; r++) {
+      const layer = byRank.get(r) || [];
+      layer.sort((a, b) => {
+        const na = nodesMap[a];
+        const nb = nodesMap[b];
+        const ta = na?.created_at || "";
+        const tb = nb?.created_at || "";
+        return ta < tb ? 1 : ta > tb ? -1 : a.localeCompare(b);
+      });
+      byRank.set(r, layer);
+    }
+
+    // Barycenter ordering (reduce edge crossings) — a few passes
+    for (let pass = 0; pass < 4; pass++) {
+      for (let r = 1; r <= maxRank; r++) {
+        const layer = byRank.get(r) || [];
+        const prev = byRank.get(r - 1) || [];
+        const idx = new Map(prev.map((id, i) => [id, i]));
+        layer.sort((a, b) => {
+          const pa = parents.get(a) || [];
+          const pb = parents.get(b) || [];
+          const ba =
+            pa.length && pa.some((p) => idx.has(p))
+              ? pa.filter((p) => idx.has(p)).reduce((s, p) => s + idx.get(p), 0) / pa.filter((p) => idx.has(p)).length
+              : layer.indexOf(a);
+          const bb =
+            pb.length && pb.some((p) => idx.has(p))
+              ? pb.filter((p) => idx.has(p)).reduce((s, p) => s + idx.get(p), 0) / pb.filter((p) => idx.has(p)).length
+              : layer.indexOf(b);
+          return ba - bb;
+        });
+        byRank.set(r, layer);
+      }
+    }
+
+    // Positions: rank → X (left→right), order in layer → Y
+    const positions = {};
+    let maxH = PAD * 2;
+    for (let r = 0; r <= maxRank; r++) {
+      const layer = byRank.get(r) || [];
+      const colH = layer.length * NODE_H + Math.max(0, layer.length - 1) * V_GAP;
+      maxH = Math.max(maxH, colH + PAD * 2);
+      const x = PAD + r * (NODE_W + H_GAP);
+      const startY = PAD + Math.max(0, (maxH - PAD * 2 - colH) / 2);
+      layer.forEach((id, i) => {
+        positions[id] = {
+          x,
+          y: startY + i * (NODE_H + V_GAP),
+          rank: r,
+        };
+      });
+    }
+    // Re-center columns now that maxH is known
+    for (let r = 0; r <= maxRank; r++) {
+      const layer = byRank.get(r) || [];
+      const colH = layer.length * NODE_H + Math.max(0, layer.length - 1) * V_GAP;
+      const startY = PAD + Math.max(0, (maxH - PAD * 2 - colH) / 2);
+      layer.forEach((id, i) => {
+        positions[id].y = startY + i * (NODE_H + V_GAP);
+      });
+    }
+
+    const width = PAD * 2 + (maxRank + 1) * NODE_W + maxRank * H_GAP;
+    // Dedupe edges (source,target)
+    const seenE = new Set();
+    const uniqEdges = [];
+    for (const e of edgeList) {
+      const k = `${e.source_id}->${e.target_id}`;
+      if (seenE.has(k)) continue;
+      seenE.add(k);
+      uniqEdges.push(e);
+    }
+    return {
+      positions,
+      edges: uniqEdges,
+      width: Math.max(width, NODE_W + PAD * 2),
+      height: Math.max(maxH, NODE_H + PAD * 2),
+      nodeW: NODE_W,
+      nodeH: NODE_H,
+    };
+  }
+
   function renderTree() {
     const root = $("tree");
     const nodes = state.graph.nodes || {};
@@ -790,43 +947,80 @@
       root.innerHTML = '<div class="tree-empty">No nodes yet</div>';
       return;
     }
-    const children = {};
-    const hasParent = new Set();
-    for (const e of edges) {
-      (children[e.source_id] ||= []).push(e.target_id);
-      hasParent.add(e.target_id);
-    }
-    const roots = list.filter((n) => !hasParent.has(n.id));
-    const shown = new Set();
 
-    function renderNode(id, depth) {
-      if (shown.has(id)) return "";
-      shown.add(id);
-      const n = nodes[id];
-      if (!n) return "";
-      const active = id === state.selectedId ? " active" : "";
-      const title = `${n.backend || "?"} · ${n.kind} · ${id.slice(0, 8)}`;
-      const prompt = (n.prompt || n.original_name || "").slice(0, 80);
-      let html = `<div class="tree-node${active}" data-id="${id}" style="margin-left:${depth * 8}px">
-        <div class="t-title badge ${backendColor(n.backend)}">${title}</div>
-        <div class="t-prompt">${escapeHtml(prompt)}</div>
-      </div>`;
-      for (const cid of children[id] || []) html += renderNode(cid, depth + 1);
-      return html;
-    }
+    const layout = layoutDag(nodes, edges);
+    const { positions, edges: dagEdges, width, height, nodeW, nodeH } = layout;
+    const sel = state.selectedId;
 
-    let html = "";
-    for (const r of roots.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))) {
-      html += renderNode(r.id, 0);
-    }
-    // orphans already shown via roots; any remaining
-    for (const n of list) {
-      if (!shown.has(n.id)) html += renderNode(n.id, 0);
-    }
-    root.innerHTML = html;
-    root.querySelectorAll(".tree-node").forEach((el) => {
+    // Edge paths: cubic from right/left mid of 96px thumbs (gallery-sized)
+    const thumbSize = 96;
+    const edgePaths = dagEdges
+      .map((e) => {
+        const a = positions[e.source_id];
+        const b = positions[e.target_id];
+        if (!a || !b) return "";
+        const x1 = a.x + thumbSize;
+        const y1 = a.y + thumbSize / 2;
+        const x2 = b.x;
+        const y2 = b.y + thumbSize / 2;
+        const midX = (x1 + x2) / 2;
+        const related =
+          sel && (e.source_id === sel || e.target_id === sel) ? " dag-edge-hot" : "";
+        const multi =
+          (nodes[e.target_id]?.parent_ids || []).length > 1 ||
+          dagEdges.filter((x) => x.target_id === e.target_id).length > 1
+            ? " dag-edge-merge"
+            : "";
+        return `<path class="dag-edge${related}${multi}" d="M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}" data-from="${e.source_id}" data-to="${e.target_id}" />`;
+      })
+      .join("");
+
+    const nodeHtml = Object.keys(positions)
+      .map((id) => {
+        const n = nodes[id];
+        const p = positions[id];
+        if (!n || !p) return "";
+        const active = id === sel ? " active" : "";
+        const parentN = (n.parent_ids || []).length;
+        const childN = dagEdges.filter((e) => e.source_id === id).length;
+        const title = `${n.backend || "?"} · ${n.kind}`;
+        const prompt = (n.prompt || n.original_name || id.slice(0, 8)).slice(0, 40);
+        const thumb =
+          n.kind === "video"
+            ? `<video src="${fileUrl(id)}" muted playsinline></video>`
+            : `<img src="${fileUrl(id)}" alt="" loading="lazy" />`;
+        const multiBadge =
+          parentN > 1 ? `<span class="dag-multi" title="${parentN} parents">×${parentN}</span>` : "";
+        return `<button type="button" class="dag-node${active}" data-id="${id}" style="left:${p.x}px;top:${p.y}px;width:${nodeW}px;height:${nodeH}px" title="${escapeHtml(title)} · ${id.slice(0, 8)}${parentN ? ` · ${parentN} parent(s)` : ""}${childN ? ` · ${childN} child(ren)` : ""}">
+          <div class="dag-thumb">
+            ${thumb}
+            ${videoKindIcon(n.kind)}
+            <span class="badge ${backendColor(n.backend)}">${escapeHtml((n.backend || n.kind || "?").slice(0, 10))}</span>
+            ${multiBadge}
+          </div>
+          <div class="dag-prompt">${escapeHtml(prompt)}</div>
+        </button>`;
+      })
+      .join("");
+
+    root.innerHTML = `<div class="dag" style="width:${width}px;height:${height}px">
+      <svg class="dag-svg" width="${width}" height="${height}" aria-hidden="true">${edgePaths}</svg>
+      <div class="dag-nodes">${nodeHtml}</div>
+    </div>`;
+
+    root.querySelectorAll(".dag-node").forEach((el) => {
       el.onclick = () => selectMedia(el.dataset.id);
     });
+
+    // Keep selected node in view within the short strip
+    if (sel) {
+      const active = root.querySelector(`.dag-node[data-id="${sel}"]`);
+      if (active) {
+        requestAnimationFrame(() => {
+          active.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+        });
+      }
+    }
   }
 
   function escapeHtml(s) {

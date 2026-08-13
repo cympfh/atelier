@@ -29,10 +29,10 @@ uv run atelier start
 | 設定 | pydantic-settings + 環境変数 |
 | Media | アップロード・一覧・本体配信・**葉ノード削除** |
 | Graph | nodes + edges、`data/lineages/{id}/` に永続化 |
-| Lineage | 名前付きワークスペース、切替・改名・10秒 autosave |
+| Lineage | 名前付きワークスペース、切替・改名・10秒 autosave、**DAG 表示**（複数親の合流エッジ） |
 | Generate | 同期 / 非同期 JobQueue（video は自動 async） |
 | @参照 | `@ImageN` / `@VideoN` → `input_slots` または候補から解決 |
-| SPA UI | Compose / Preview / Gallery / Lineage |
+| SPA UI | Compose / Preview / Gallery / Lineage（layered DAG） |
 
 ### バックエンド
 
