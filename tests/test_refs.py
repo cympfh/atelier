@@ -25,7 +25,9 @@ def test_strip_refs() -> None:
 def test_resolve_slots() -> None:
     prompt, ids = resolve_media_ids("edit @Image1 with @Image2", slot_ids=["aaa", "bbb"])
     assert ids == ["aaa", "bbb"]
-    assert "@" not in prompt
+    # Original prompt (with @refs) is preserved for node storage / Restore setup
+    assert prompt == "edit @Image1 with @Image2"
+    assert strip_refs(prompt) == "edit with"
 
 
 def test_resolve_slots_oob() -> None:
@@ -41,4 +43,4 @@ def test_resolve_candidates() -> None:
     ]
     prompt, ids = resolve_media_ids("mix @Image2 and @Video1", candidates=nodes)
     assert ids == ["i2", "v1"]
-    assert "mix" in prompt
+    assert prompt == "mix @Image2 and @Video1"

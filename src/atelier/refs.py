@@ -55,7 +55,10 @@ def resolve_media_ids(
     2. Else if candidates provided: Nth image/video among candidates (newest-first list ok).
     3. Explicit media_ids on the request still merge separately in the API layer.
 
-    Returns (cleaned_prompt, resolved_ids in ref order).
+    Returns (original prompt with @refs intact, resolved_ids in ref order).
+
+    @tokens are kept in the returned prompt so nodes / Restore setup can show them.
+    Callers that send text to a backend should pass ``strip_refs(prompt)`` separately.
     """
     refs = parse_refs(prompt)
     if not refs:
@@ -71,7 +74,7 @@ def resolve_media_ids(
             mid = slot_ids[idx]
             if mid not in resolved:
                 resolved.append(mid)
-        return strip_refs(prompt), resolved
+        return prompt, resolved
 
     if candidates is None:
         raise InvalidRequestError("cannot resolve @refs without input slots or candidates")
@@ -88,4 +91,4 @@ def resolve_media_ids(
         if mid not in resolved:
             resolved.append(mid)
 
-    return strip_refs(prompt), resolved
+    return prompt, resolved

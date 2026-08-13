@@ -98,6 +98,29 @@ def test_pipeline_i2i(stores: tuple[MediaStore, GraphStore, BackendRegistry]) ->
     assert media.read_bytes(nodes[0]) == b"source-bytes"
 
 
+def test_pipeline_keeps_at_refs_on_node(stores: tuple[MediaStore, GraphStore, BackendRegistry]) -> None:
+    """Node prompt keeps @ImageN; backend receives stripped text."""
+    media, graph, registry = stores
+    src = media.save_bytes(b"source-bytes", mime="image/png", backend="upload")
+    graph.add_node(src)
+    nodes = asyncio.run(
+        run_generate(
+            GenerateRequest(
+                mode=GenerateMode.i2i,
+                backend="echo",
+                prompt="recolor @Image1 slightly",
+                media_ids=[src.id],
+            ),
+            registry=registry,
+            graph=graph,
+            media=media,
+        )
+    )
+    assert nodes[0].prompt == "recolor @Image1 slightly"
+    # Echo echoes the backend-facing prompt into asset params
+    assert nodes[0].params.get("prompt") == "recolor slightly"
+
+
 def test_pipeline_missing_media(stores: tuple[MediaStore, GraphStore, BackendRegistry]) -> None:
     media, graph, registry = stores
     with pytest.raises(MediaNotFoundError):

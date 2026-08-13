@@ -16,6 +16,7 @@ from atelier.backends.types import (
 from atelier.graph.models import MediaKind, MediaNode
 from atelier.graph.store import GraphStore
 from atelier.media.store import MediaStore
+from atelier.refs import strip_refs
 
 _MODES_NEED_MEDIA_INPUT = frozenset({GenerateMode.i2i, GenerateMode.i2v, GenerateMode.v2v})
 _MODES_OUTPUT_VIDEO = frozenset({GenerateMode.t2v, GenerateMode.i2v, GenerateMode.v2v})
@@ -79,10 +80,13 @@ async def run_generate(
 
     _validate_request(request, inputs)
 
+    # Backend gets @ImageN/@VideoN stripped; node metadata keeps the original prompt.
+    backend_prompt = strip_refs(request.prompt)
+
     try:
         assets = await backend.generate(
             mode=request.mode,
-            prompt=request.prompt,
+            prompt=backend_prompt,
             inputs=inputs,
             params=dict(request.params),
         )

@@ -66,7 +66,8 @@ def test_generate_with_at_ref(client: TestClient) -> None:
     assert r.status_code == 200, r.text
     out = r.json()["nodes"][0]
     assert out["parent_ids"] == [mid]
-    assert "@Image" not in (out.get("prompt") or "")
+    # Stored prompt keeps @ImageN for Restore setup / lineage display
+    assert out.get("prompt") == "recolor @Image1"
 
 
 def test_generate_unavailable_grok(client: TestClient) -> None:

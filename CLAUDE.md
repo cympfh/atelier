@@ -171,7 +171,7 @@ uv run pytest
 ### UI
 
 8. ブラウザキャッシュで古い `app.js` が残ると radio 化後に `outSel.options` エラー等が出る → **`?v=` を必ず bump**
-9. Restore setup の prompt は生成時に `@ImageN` が **strip 済み**の可能性がある。parents は `parent_ids` から復元
+9. ノードの prompt は `@ImageN` を **保持**（backend 送信時のみ strip）。Restore setup は prompt + `parent_ids` から復元
 10. 大画像 upload は **クライアントで長辺 2048 にリサイズ**（gif はそのまま）
 
 ### SD WebUI
