@@ -239,3 +239,5 @@ README に記載。
 ## [x] favicon 作成 [2026-08-12 18:55 完了]
 
 `icons/atelier.svg` 源。`favicon.ico` / 16·32 PNG / apple-touch を生成。`index.html` + `/favicon.ico` ルート、README に表示。
+
+## [ ] preview をフルスクリーンに拡大できるようにする

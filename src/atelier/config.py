@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     xai_api_key: str | None = Field(default=None, alias="XAI_API_KEY")
 
     # Stable Diffusion WebUI (A1111-compatible)
-    sd_webui_url: str = Field(default="http://127.0.0.1:7860", alias="SD_WEBUI_URL")
+    # Forge on this machine uses 7862 (not classic 7860)
+    sd_webui_url: str = Field(default="http://127.0.0.1:7862", alias="SD_WEBUI_URL")
 
     # HTTP server
     host: str = Field(default="0.0.0.0", alias="ATELIER_HOST")

@@ -49,9 +49,11 @@ uv run atelier start
 
 ### Stable Diffusion WebUI（任意）
 
-1. WebUI を **`--api`** 付きで起動する  
-2. チェックポイントを配置する（例: [WAI-NSFW-illustrious-SDXL](https://civitai.com/models/827813/wai-nsfw-illustrious-sdxl)）  
-3. `export SD_WEBUI_URL=http://127.0.0.1:7860`  
+1. WebUI / Forge を **`--api --listen`** 付きで起動する（API 有効 + 外部から接続可）  
+2. チェックポイントを配置する（例: [WAI-NSFW-Illustrious](https://civitai.com/models/827813/wai-nsfw-illustrious-sdxl)）  
+3. `SD_WEBUI_URL` を実ポートに合わせる（この環境の Forge は **7862**）  
+   - Windows 上: `http://127.0.0.1:7862`  
+   - WSL から Windows の Forge: `http://<WindowsのIP>:7862`（`.env` 参照）  
 4. atelier を起動し、backend で `sd_webui` を選ぶ  
 
 SDXL / Illustrious の目安: 1024×1024、sampler `Euler a`、steps 28 前後。
@@ -61,7 +63,7 @@ SDXL / Illustrious の目安: 1024×1024、sampler `Euler a`、steps 28 前後�
 | 環境変数 | デフォルト | 意味 |
 |----------|------------|------|
 | `XAI_API_KEY` | （なし） | Grok API キー |
-| `SD_WEBUI_URL` | `http://127.0.0.1:7860` | SD WebUI の URL |
+| `SD_WEBUI_URL` | `http://127.0.0.1:7862` | SD WebUI / Forge の URL（`--api` 必須） |
 | `ATELIER_HOST` | `0.0.0.0` | 待ち受けアドレス |
 | `ATELIER_PORT` | `8000` | ポート |
 | `ATELIER_DATA_DIR` | `data` | lineage・ファイルの保存先 |

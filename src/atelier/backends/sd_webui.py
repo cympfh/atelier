@@ -198,10 +198,11 @@ class SDWebUIBackend(Backend):
         if not self._probe:
             return True, None
         try:
-            with httpx.Client(timeout=3.0) as c:
+            # WSL↔Windows bridge can add latency; keep probe generous
+            with httpx.Client(timeout=httpx.Timeout(15.0, connect=5.0)) as c:
                 r = c.get(f"{self._settings.sd_webui_url.rstrip('/')}/sdapi/v1/sd-models")
                 if r.status_code >= 400:
-                    return False, f"SD WebUI HTTP {r.status_code}"
+                    return False, f"SD WebUI HTTP {r.status_code}: {r.text[:200]}"
             return True, None
         except Exception as e:
             return False, f"SD WebUI unreachable: {e}"
