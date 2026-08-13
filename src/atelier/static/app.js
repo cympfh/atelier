@@ -1011,16 +1011,6 @@
     root.querySelectorAll(".dag-node").forEach((el) => {
       el.onclick = () => selectMedia(el.dataset.id);
     });
-
-    // Keep selected node in view within the short strip
-    if (sel) {
-      const active = root.querySelector(`.dag-node[data-id="${sel}"]`);
-      if (active) {
-        requestAnimationFrame(() => {
-          active.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
-        });
-      }
-    }
   }
 
   function escapeHtml(s) {
