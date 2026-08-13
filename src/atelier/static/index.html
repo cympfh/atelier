@@ -51,10 +51,14 @@
           </div>
           <span id="modeHint" class="mode-hint">mode: t2i (auto)</span>
         </div>
-        <label class="field grow">
-          <span>Prompt <em>@Image1 @Video1 · Ctrl+Enter</em></span>
-          <textarea id="prompt" rows="5" placeholder="Describe the result… use @Image1 to reference inputs"></textarea>
+        <label class="field grow prompt-field">
+          <span>Prompt <em>@Image1 @Video1 · Ctrl+Enter · tags suggest on sd_webui</em></span>
+          <div class="prompt-wrap">
+            <textarea id="prompt" rows="5" placeholder="Describe the result… use @Image1 to reference inputs" autocomplete="off"></textarea>
+            <ul id="tagAc" class="tag-ac hidden" role="listbox" aria-label="Tag suggestions"></ul>
+          </div>
         </label>
+        <div id="tagGroups" class="tag-groups hidden" aria-label="Tag groups"></div>
         <div id="params" class="params"></div>
         <div class="slots">
           <div class="slots-head">
@@ -119,6 +123,6 @@
     <div class="lightbox-hint">Esc / click outside to close</div>
   </div>
 
-  <script src="/static/app.js?v=11"></script>
+  <script src="/static/app.js?v=12"></script>
 </body>
 </html>

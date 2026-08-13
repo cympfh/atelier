@@ -30,6 +30,22 @@ _LORA_ENTRY = re.compile(
 )
 
 SD_PARAM_SCHEMA: dict[str, Any] = {
+    "checkpoint": {
+        "type": "string",
+        "default": "",
+        "description": f"sd_model_checkpoint title; prefer {DEFAULT_CHECKPOINT_HINT} if installed",
+        "modes": ["t2i", "i2i"],
+        # UI fills options from GET /api/sd/models (pulldown)
+        "ui": "checkpoint_select",
+    },
+    "n": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 8,
+        "default": 1,
+        "description": "Number of images (A1111 batch_size)",
+        "modes": ["t2i", "i2i"],
+    },
     "negative_prompt": {"type": "string", "default": "", "modes": ["t2i", "i2i"]},
     "steps": {"type": "integer", "minimum": 1, "maximum": 150, "default": 28, "modes": ["t2i", "i2i"]},
     "cfg_scale": {"type": "number", "minimum": 1, "maximum": 30, "default": 7.0, "modes": ["t2i", "i2i"]},
@@ -43,12 +59,6 @@ SD_PARAM_SCHEMA: dict[str, Any] = {
         "maximum": 1,
         "default": 0.55,
         "modes": ["i2i"],
-    },
-    "checkpoint": {
-        "type": "string",
-        "default": "",
-        "description": f"sd_model_checkpoint title; prefer {DEFAULT_CHECKPOINT_HINT} if installed",
-        "modes": ["t2i", "i2i"],
     },
     # LoRA: "my_lora:0.8, other_lora:0.5" → <lora:my_lora:0.8> appended to prompt
     "lora": {
@@ -257,6 +267,12 @@ class SDWebUIBackend(Backend):
 
     def _common_payload(self, prompt: str, params: dict[str, Any]) -> dict[str, Any]:
         final_prompt = apply_loras_to_prompt(prompt, params.get("lora"))
+        n_raw = params.get("n", params.get("batch_size", 1))
+        try:
+            n = int(n_raw if n_raw is not None and n_raw != "" else 1)
+        except (TypeError, ValueError):
+            n = 1
+        n = max(1, min(n, 8))
         payload: dict[str, Any] = {
             "prompt": final_prompt,
             "negative_prompt": params.get("negative_prompt", ""),
@@ -266,7 +282,7 @@ class SDWebUIBackend(Backend):
             "height": int(params.get("height", 1024)),
             "sampler_name": params.get("sampler_name", "Euler a"),
             "seed": int(params.get("seed", -1)),
-            "batch_size": 1,
+            "batch_size": n,
             "n_iter": 1,
             "restore_faces": _as_bool(params.get("restore_faces"), False),
         }

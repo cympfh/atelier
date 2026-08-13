@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     # Forge on this machine uses 7862 (not classic 7860)
     sd_webui_url: str = Field(default="http://127.0.0.1:7862", alias="SD_WEBUI_URL")
 
+    # Tag groups for prompt suggest (tagskeeper-compatible TOML)
+    tags_toml: Path | None = Field(
+        default=None,
+        alias="ATELIER_TAGS_TOML",
+        description="Path to tags.toml (default: ~/git/tagskeeper/tags.toml if present)",
+    )
+
     # HTTP server
     host: str = Field(default="0.0.0.0", alias="ATELIER_HOST")
     port: int = Field(default=8000, alias="ATELIER_PORT")
@@ -37,6 +44,13 @@ class Settings(BaseSettings):
     def ensure_data_dir(self) -> Path:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         return self.data_dir
+
+    def resolve_tags_toml(self) -> Path | None:
+        if self.tags_toml is not None:
+            p = Path(self.tags_toml).expanduser()
+            return p if p.is_file() else None
+        default = Path.home() / "git" / "tagskeeper" / "tags.toml"
+        return default if default.is_file() else None
 
 
 def get_settings() -> Settings:

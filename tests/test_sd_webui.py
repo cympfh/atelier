@@ -118,3 +118,17 @@ def test_sd_lora_and_extensions_in_payload() -> None:
     assert body["override_settings"]["CLIP_stop_at_last_layers"] == 2
     assert body["enable_hr"] is True
     assert body["alwayson_scripts"]["ControlNet"]["args"] == []
+
+
+def test_sd_batch_n() -> None:
+    transport = SDTransport()
+    client = httpx.AsyncClient(transport=transport, base_url="http://sd.test")
+    backend = SDWebUIBackend(
+        Settings(SD_WEBUI_URL="http://sd.test"),
+        client=client,
+        probe_on_availability=False,
+    )
+    asyncio.run(backend.generate(GenerateMode.t2i, "1girl", [], {"n": 4}))
+    assert transport.last_body is not None
+    assert transport.last_body["batch_size"] == 4
+    assert transport.last_body["n_iter"] == 1

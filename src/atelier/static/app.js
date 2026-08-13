@@ -9,6 +9,9 @@
     paramSchema: {},
     lineages: [],
     currentLineage: null,
+    tags: null, // { groups, tags, negative_tags, available }
+    tagActiveGroups: new Set(),
+    tagAcIndex: -1,
   };
 
   function setStatus(msg) {
@@ -182,6 +185,27 @@
           sel.appendChild(o);
         }
         label.appendChild(sel);
+      } else if (def.ui === "checkpoint_select" || key === "checkpoint") {
+        // Pulldown filled async from /api/sd/models
+        label.classList.add("span2");
+        label.innerHTML = `<span>${key}</span>`;
+        const sel = document.createElement("select");
+        sel.dataset.param = key;
+        sel.dataset.ui = "checkpoint_select";
+        const empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "(loading models…)";
+        sel.appendChild(empty);
+        const presetVal = hasPreset ? values[key] ?? "" : def.default ?? "";
+        if (presetVal) {
+          const o = document.createElement("option");
+          o.value = presetVal;
+          o.textContent = presetVal;
+          o.selected = true;
+          sel.appendChild(o);
+        }
+        if (def.description) sel.title = def.description;
+        label.appendChild(sel);
       } else if (def.type === "boolean") {
         label.innerHTML = `<span>${key}</span>`;
         const input = document.createElement("input");
@@ -212,6 +236,215 @@
       }
       box.appendChild(label);
     }
+    enhanceCheckpointSelect(values);
+    updateTagUi();
+  }
+
+  async function enhanceCheckpointSelect(values) {
+    const sel = $("params").querySelector('select[data-ui="checkpoint_select"]');
+    if (!sel) return;
+    const b = currentBackend();
+    if (!b || b.name !== "sd_webui" || !b.available) {
+      sel.innerHTML = "";
+      const o = document.createElement("option");
+      o.value = "";
+      o.textContent = b?.available === false ? "(sd unavailable)" : "(no models)";
+      sel.appendChild(o);
+      return;
+    }
+    const preferred =
+      (values && values.checkpoint) ||
+      sel.value ||
+      "";
+    try {
+      const models = await api("/api/sd/models");
+      const titles = (models || []).map((m) => m.title || m.model_name).filter(Boolean);
+      sel.innerHTML = "";
+      const blank = document.createElement("option");
+      blank.value = "";
+      blank.textContent = titles.length ? "(default checkpoint)" : "(no models)";
+      sel.appendChild(blank);
+      for (const t of titles) {
+        const o = document.createElement("option");
+        o.value = t;
+        o.textContent = t;
+        if (preferred && t === preferred) o.selected = true;
+        sel.appendChild(o);
+      }
+      // keep restored value even if not in list
+      if (preferred && !titles.includes(preferred)) {
+        const o = document.createElement("option");
+        o.value = preferred;
+        o.textContent = preferred + " (saved)";
+        o.selected = true;
+        sel.appendChild(o);
+      }
+    } catch (e) {
+      sel.innerHTML = "";
+      const o = document.createElement("option");
+      o.value = preferred || "";
+      o.textContent = preferred || "(models load failed)";
+      if (preferred) o.selected = true;
+      sel.appendChild(o);
+    }
+  }
+
+  async function ensureTagsLoaded() {
+    if (state.tags) return state.tags;
+    try {
+      state.tags = await api("/api/tags");
+    } catch (_) {
+      state.tags = { available: false, groups: [], tags: [], negative_tags: [] };
+    }
+    return state.tags;
+  }
+
+  function updateTagUi() {
+    const wrap = $("tagGroups");
+    const b = currentBackend();
+    const show = b && b.name === "sd_webui";
+    if (!show) {
+      wrap.classList.add("hidden");
+      wrap.innerHTML = "";
+      hideTagAc();
+      return;
+    }
+    wrap.classList.remove("hidden");
+    void ensureTagsLoaded().then((catalog) => {
+      if (currentBackend()?.name !== "sd_webui") return;
+      wrap.innerHTML = "";
+      if (!catalog.available || !catalog.groups?.length) {
+        const hint = document.createElement("span");
+        hint.className = "mode-hint";
+        hint.textContent = "tags.toml not found (ATELIER_TAGS_TOML)";
+        wrap.appendChild(hint);
+        return;
+      }
+      for (const g of catalog.groups) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tag-chip";
+        btn.textContent = g.name;
+        btn.title = (g.positive || []).slice(0, 12).join(", ");
+        if (g.default) btn.classList.add("default-on");
+        if (state.tagActiveGroups.has(g.name)) btn.classList.add("on");
+        btn.onclick = () => toggleTagGroup(g);
+        wrap.appendChild(btn);
+      }
+    });
+  }
+
+  function appendCommaList(current, items) {
+    const base = (current || "").trim();
+    const have = new Set(
+      base
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    );
+    const add = items.filter((t) => t && !have.has(t));
+    if (!add.length) return base;
+    if (!base) return add.join(", ");
+    const needsComma = !base.endsWith(",");
+    return base + (needsComma ? ", " : " ") + add.join(", ");
+  }
+
+  function removeCommaList(current, items) {
+    const drop = new Set(items);
+    return (current || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((t) => t && !drop.has(t))
+      .join(", ");
+  }
+
+  function toggleTagGroup(group) {
+    const name = group.name;
+    const on = state.tagActiveGroups.has(name);
+    const prompt = $("prompt");
+    const negEl = $("params").querySelector('[data-param="negative_prompt"]');
+    if (on) {
+      state.tagActiveGroups.delete(name);
+      prompt.value = removeCommaList(prompt.value, group.positive || []);
+      if (negEl) negEl.value = removeCommaList(negEl.value, group.negative || []);
+    } else {
+      state.tagActiveGroups.add(name);
+      prompt.value = appendCommaList(prompt.value, group.positive || []);
+      if (negEl) negEl.value = appendCommaList(negEl.value, group.negative || []);
+    }
+    updateTagUi();
+  }
+
+  function hideTagAc() {
+    const ac = $("tagAc");
+    ac.classList.add("hidden");
+    ac.innerHTML = "";
+    state.tagAcIndex = -1;
+  }
+
+  function currentPromptToken(text, caret) {
+    const before = text.slice(0, caret);
+    // last segment after comma or newline
+    const m = before.match(/(?:^|[,\n])\s*([^,\n]*)$/);
+    const token = (m ? m[1] : before).trimStart();
+    const start = caret - token.length;
+    return { token, start, end: caret };
+  }
+
+  async function refreshTagAc() {
+    const b = currentBackend();
+    if (!b || b.name !== "sd_webui") {
+      hideTagAc();
+      return;
+    }
+    const catalog = await ensureTagsLoaded();
+    if (!catalog.available) {
+      hideTagAc();
+      return;
+    }
+    const ta = $("prompt");
+    const { token, start } = currentPromptToken(ta.value, ta.selectionStart ?? ta.value.length);
+    const q = token.trim().toLowerCase();
+    if (!q || q.length < 1) {
+      hideTagAc();
+      return;
+    }
+    const pool = catalog.tags || [];
+    const hits = pool.filter((t) => t.toLowerCase().includes(q)).slice(0, 12);
+    const ac = $("tagAc");
+    if (!hits.length) {
+      hideTagAc();
+      return;
+    }
+    ac.innerHTML = "";
+    hits.forEach((t, i) => {
+      const li = document.createElement("li");
+      li.textContent = t;
+      li.role = "option";
+      li.dataset.tag = t;
+      if (i === state.tagAcIndex) li.classList.add("active");
+      li.onmousedown = (ev) => {
+        ev.preventDefault();
+        applyTagSuggestion(t, start);
+      };
+      ac.appendChild(li);
+    });
+    ac.classList.remove("hidden");
+  }
+
+  function applyTagSuggestion(tag, tokenStart) {
+    const ta = $("prompt");
+    const caret = ta.selectionStart ?? ta.value.length;
+    const before = ta.value.slice(0, tokenStart);
+    const after = ta.value.slice(caret);
+    const needsComma = before.trim() && !before.trimEnd().endsWith(",");
+    const insert = (needsComma ? ", " : "") + tag;
+    // if before ends mid-token, tokenStart already points to token begin
+    ta.value = before + insert + after;
+    const pos = (before + insert).length;
+    ta.setSelectionRange(pos, pos);
+    ta.focus();
+    hideTagAc();
   }
 
   function setOutputKind(kind) {
@@ -694,10 +927,48 @@
   });
 
   $("prompt").addEventListener("keydown", (ev) => {
+    const ac = $("tagAc");
+    const open = ac && !ac.classList.contains("hidden") && ac.children.length;
+    if (open) {
+      if (ev.key === "ArrowDown") {
+        ev.preventDefault();
+        state.tagAcIndex = Math.min(state.tagAcIndex + 1, ac.children.length - 1);
+        [...ac.children].forEach((li, i) => li.classList.toggle("active", i === state.tagAcIndex));
+        return;
+      }
+      if (ev.key === "ArrowUp") {
+        ev.preventDefault();
+        state.tagAcIndex = Math.max(state.tagAcIndex - 1, 0);
+        [...ac.children].forEach((li, i) => li.classList.toggle("active", i === state.tagAcIndex));
+        return;
+      }
+      if (ev.key === "Enter" || ev.key === "Tab") {
+        const li = ac.children[state.tagAcIndex >= 0 ? state.tagAcIndex : 0];
+        if (li) {
+          ev.preventDefault();
+          const ta = $("prompt");
+          const { start } = currentPromptToken(ta.value, ta.selectionStart ?? ta.value.length);
+          applyTagSuggestion(li.dataset.tag, start);
+          return;
+        }
+      }
+      if (ev.key === "Escape") {
+        hideTagAc();
+        return;
+      }
+    }
     if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
       ev.preventDefault();
       $("generate").click();
     }
+  });
+  $("prompt").addEventListener("input", () => {
+    state.tagAcIndex = -1;
+    void refreshTagAc();
+  });
+  $("prompt").addEventListener("blur", () => {
+    // delay so mousedown on suggestion can fire
+    setTimeout(hideTagAc, 150);
   });
 
   $("lineageSelect").onchange = async () => {
